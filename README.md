@@ -3,7 +3,7 @@
 给自己攒的一套 agent skill，遵循 [Agent Skills 规范](https://agentskills.io/specification)：一个目录一个 skill，`SKILL.md` 带 YAML frontmatter，支撑文件按需加载。
 
 不是「教程合集」。每条 skill 的目标是：把 agent 从「看起来答得像样」推到「给出的东西能直接落地」——
-每个结论都带数值、每条命令都能跑、每个测试都能说出它防的是哪个 bug。
+每个结论都带数值、每条命令都能跑、每条规则都能说出它防的是哪个错误。
 
 ## 装
 
@@ -13,7 +13,7 @@ cd skillforge
 
 ./install.sh                          # 软链到 ~/.claude/skills
 ./install.sh --project ~/code/app     # 装进某个项目的 .claude/skills
-./install.sh --only ui-critique       # 只装一个
+./install.sh --only frontend-design   # 只装一个
 ./install.sh --copy                   # 复制而不是软链
 ./install.sh --list                   # 看这仓库里有什么
 ./install.sh --remove                 # 卸掉（只删自己建的软链）
@@ -23,25 +23,26 @@ cd skillforge
 
 ## 有什么
 
-### 前端界面
+### 自己写的
 
 | skill | 什么时候用 | 产出 |
 |---|---|---|
-| [`ui-critique`](skills/ui-critique/SKILL.md) | 丢一张截图 / 一个组件，问「这样好看吗」「为什么感觉怪」 | 按严重度排序的问题表，每行带实测值和替换值；附「别动的地方」 |
-| [`design-tokens`](skills/design-tokens/SKILL.md) | 开新项目、补暗色、给一个品牌色 | `tokens.css` + `tokens.json`，明暗两套语义 token，附对比度表；低于 4.5:1 直接报错 |
+| [`frontend-design`](skills/frontend-design/SKILL.md) | 要做界面、要好看、要「企业级不像模板」 | 先出一份设计计划（语气/配色/版式/动效各定一句），再写码；带 AI 味黑名单和交付前自检清单 |
 
-### 日常开发
+### 收录的（[vendor/](vendor/README.md)）
 
-| skill | 什么时候用 | 产出 |
+别人的东西不掺进来但也不藏着，原样抄在 `vendor/` 下、保留原许可：
+
+| 目录 | 来源 | 收了多少 |
 |---|---|---|
-| [`commit-craft`](skills/commit-craft/SKILL.md) | 改完了要提交 | 符合仓库既有风格的 commit，正文写「为什么」，必要时拆成多个 commit |
-| [`debug-probe`](skills/debug-probe/SKILL.md) | 报错、测试挂了、行为「有点怪」 | 假设树 + 每个假设一个最小探针，证据出来再改代码 |
-| [`test-gap`](skills/test-gap/SKILL.md) | 要测试、覆盖率很高但还在漏 bug、刚修完 bug | 缺口表 +「如果代码错成 X 这条测试会失败」的用例，不凑覆盖率数字 |
+| `vendor/superpowers` | [obra/superpowers](https://github.com/obra/superpowers) | 15 个，方法论向：先规划再动手、系统化调试、验证后再收工 |
+| `vendor/agent-skills` | [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills) | 25 个，工程向：代码评审、错误恢复、安全加固、性能优化、前端 UI |
+| `vendor/find-skills` | [vercel-labs/skills](https://github.com/vercel-labs/skills) | 1 个，元技能：按任务去生态里找现成 skill |
 
 ## 三条共同规矩
 
 1. **先测量再判断。** 不给「感觉有点挤」「优化一下性能」这种话，给 8px→12px、4.1:1→6.2:1、42 个用例里 3 个失败。
-2. **能跑的东西才叫产出。** 有脚本就真的跑脚本（`contrast.py`、`gen_tokens.py`、`commit_context.sh`），不把命令写在 markdown 里让用户自己试。
+2. **能跑的东西才叫产出。** 有脚本就真跑脚本，不把命令写在 markdown 里让人自己试。
 3. **说清为什么，不堆清单。** 每条规则后面跟一句它防的是什么错误——这样下一个人知道什么时候可以破例。
 
 ## 规范怎么保证
@@ -49,7 +50,7 @@ cd skillforge
 `tools/validate_skills.py` 用 stdlib 实现了规范里的硬约束，CI 每次都跑：
 
 ```bash
-python3 tools/validate_skills.py      # 5 skill(s) valid, 0 warning(s)
+python3 tools/validate_skills.py
 python3 -m unittest discover -s tests -t .
 ```
 
@@ -69,4 +70,4 @@ python3 tools/validate_skills.py
 
 ## License
 
-MIT
+MIT（`vendor/` 下各目录保留上游自己的许可）

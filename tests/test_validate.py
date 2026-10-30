@@ -163,7 +163,7 @@ class RealSkillsTests(unittest.TestCase):
     def test_every_skill_in_repo_is_valid(self):
         skills = ROOT / "skills"
         dirs = sorted(d for d in skills.iterdir() if d.is_dir())
-        self.assertGreaterEqual(len(dirs), 5)
+        self.assertGreaterEqual(len(dirs), 1)
         for d in dirs:
             with self.subTest(skill=d.name):
                 errors, _ = check_skill(d)
