@@ -38,6 +38,7 @@ cd skillforge
 | `vendor/superpowers` | [obra/superpowers](https://github.com/obra/superpowers) | 15 个，方法论向：先规划再动手、系统化调试、验证后再收工 |
 | `vendor/agent-skills` | [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills) | 25 个，工程向：代码评审、错误恢复、安全加固、性能优化、前端 UI |
 | `vendor/find-skills` | [vercel-labs/skills](https://github.com/vercel-labs/skills) | 1 个，元技能：按任务去生态里找现成 skill |
+| `vendor/agent-skills-standard` | [HoangNguyen0403/agent-skills-standard](https://github.com/HoangNguyen0403/agent-skills-standard) | 20 个，语言与框架级规范，从上游 299 条里挑的 |
 
 ## 三条共同规矩
 

@@ -1,0 +1,69 @@
+{
+  "skill_name": "common-api-design",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "How should I implement common api design best practices?",
+      "expected_output": "**Lowercase, kebab-case**: `/user-profiles`, not `/UserProfiles` or `/user_profiles`.",
+      "assertions": [
+        {
+          "id": "a1",
+          "description": "Checks the task contract includes Lowercase",
+          "type": "contains",
+          "value": "Lowercase"
+        },
+        {
+          "id": "a2",
+          "description": "Checks the task contract includes kebab-case",
+          "type": "contains",
+          "value": "kebab-case"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "What are the common anti-patterns to avoid in common api design?",
+      "expected_output": "**Plural nouns**: `/orders`, `/products`. Not `/order`, `/getProducts`.",
+      "assertions": [
+        {
+          "id": "a1",
+          "description": "Checks the task contract includes Plural nouns",
+          "type": "contains",
+          "value": "Plural nouns"
+        },
+        {
+          "id": "a2",
+          "description": "Checks the task contract includes /orders",
+          "type": "contains",
+          "value": "/orders"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Give me a quick-start example for common api design.",
+      "expected_output": "**No verbs in paths** (except action sub-resources): `/orders/:id/cancel` ✅, `/cancelOrder` ❌.",
+      "assertions": [
+        {
+          "id": "a1",
+          "description": "Checks the task contract includes verbs",
+          "type": "contains",
+          "value": "verbs"
+        },
+        {
+          "id": "a2",
+          "description": "Checks the task contract includes paths",
+          "type": "contains",
+          "value": "paths"
+        }
+      ]
+    }
+  ],
+  "should_not_trigger": [
+    "Set up a basic common project from scratch",
+    "How do I install common dependencies?",
+    "What is common?",
+    "Configure CI/CD for an unrelated platform"
+  ],
+  "should_trigger": ["How should I implement common api design best practices?"]
+}
