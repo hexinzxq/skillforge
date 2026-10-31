@@ -238,6 +238,56 @@ class VendorDiscoveryTests(unittest.TestCase):
             self.assertEqual(discover_vendor(Path(tmp)), [])
 
 
+class ScriptTests(unittest.TestCase):
+    """A script that cannot run is worse than no script: the agent blames itself."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.addCleanup(self.tmp.cleanup)
+
+    def skill_with_script(self, name: str, body: str) -> Path:
+        return make_skill(self.root, "sample-skill", GOOD, extra={name: body})
+
+    def test_syntax_error_is_an_error(self):
+        d = self.skill_with_script("scripts/run.py", "#!/usr/bin/env python3\ndef broken(:\n")
+        errors, _ = check_skill(d)
+        self.assertTrue(any("does not compile" in e for e in errors), errors)
+
+    def test_missing_shebang_is_reported(self):
+        d = self.skill_with_script("scripts/run.py", "print('hi')\n")
+        errors, _ = check_skill(d)
+        self.assertTrue(any("no shebang" in e for e in errors), errors)
+
+    def test_shell_script_with_wrong_shebang(self):
+        d = self.skill_with_script("scripts/run.sh", "#!/usr/bin/env python3\necho hi\n")
+        errors, _ = check_skill(d)
+        self.assertTrue(any("shebang is not a shell" in e for e in errors), errors)
+
+    def test_valid_python_and_shell_scripts_pass(self):
+        d = make_skill(self.root, "sample-skill", GOOD, extra={
+            "scripts/run.py": "#!/usr/bin/env python3\nprint('ok')\n",
+            "scripts/run.sh": "#!/bin/sh\necho ok\n",
+        })
+        errors, _ = check_skill(d)
+        self.assertEqual(errors, [])
+
+    def test_bytecode_and_pycache_are_ignored(self):
+        d = make_skill(self.root, "sample-skill", GOOD, extra={
+            "scripts/run.py": "#!/usr/bin/env python3\nprint('ok')\n",
+            "scripts/__pycache__/run.cpython-312.pyc": "\x00\x01not utf-8\n",
+            "scripts/notes.txt": "\x00\x01not utf-8\n",
+        })
+        errors, _ = check_skill(d)
+        self.assertEqual(errors, [])
+
+    def test_vendored_broken_script_is_only_a_warning(self):
+        d = self.skill_with_script("scripts/run.py", "def broken(:\n")
+        errors, warnings = check_skill(d, strict=False)
+        self.assertEqual(errors, [])
+        self.assertTrue(any("does not compile" in w for w in warnings), warnings)
+
+
 class RealSkillsTests(unittest.TestCase):
     """The repo's own skills must pass their own validator."""
 
@@ -249,6 +299,12 @@ class RealSkillsTests(unittest.TestCase):
             with self.subTest(skill=d.name):
                 errors, _ = check_skill(d)
                 self.assertEqual(errors, [], f"{d.name}: {errors}")
+
+    def test_every_shipped_script_compiles(self):
+        for d in sorted(p for p in (ROOT / "skills").iterdir() if p.is_dir()):
+            with self.subTest(skill=d.name):
+                errors, _ = check_skill(d)
+                self.assertEqual([e for e in errors if "compile" in e or "shebang" in e], [])
 
     def test_every_vendored_skill_is_loadable(self):
         for d in discover_vendor(ROOT):

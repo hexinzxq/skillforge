@@ -10,6 +10,7 @@ Checks (errors fail the build):
   - `metadata` is a map of string keys to string values
   - only the six spec fields are used (Claude Code errors on unexpected keys)
   - every path mentioned in the body as references/ scripts/ assets/ exists
+  - every script under scripts/ compiles (a script that cannot run is worse than none)
   - body is not empty
 
 Vendored skills (`vendor/**/SKILL.md`) are checked too, in relaxed mode: only the
@@ -94,6 +95,45 @@ def _unquote(value: str) -> str:
     if BARE_TYPED.match(value):
         return Bare(value)
     return value
+
+
+SH_INTERPRETERS = ("sh", "bash", "zsh")
+
+
+def check_scripts(skill_dir: Path, soft) -> None:
+    """Scripts are the part of a skill that executes, so a syntax error there is a
+    runtime failure the model will blame on its own command. Compile them."""
+    sdir = skill_dir / "scripts"
+    if not sdir.is_dir():
+        return
+    for f in sorted(sdir.rglob("*")):
+        if not f.is_file() or f.name.startswith(".") or "__pycache__" in f.parts:
+            continue
+        if f.suffix not in (".py", ".sh", ".bash", ".zsh"):
+            continue
+        rel = f.relative_to(skill_dir)
+        try:
+            text = f.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            soft(f"{skill_dir.name}: {rel} is not UTF-8")
+            continue
+        first = text.splitlines()[0] if text.strip() else ""
+        if f.suffix == ".py":
+            try:
+                compile(text, str(rel), "exec")
+            except SyntaxError as exc:
+                soft(f"{skill_dir.name}: {rel} does not compile "
+                     f"({exc.msg}, line {exc.lineno})")
+                continue
+            if not first.startswith("#!"):
+                soft(f"{skill_dir.name}: {rel} has no shebang line")
+            elif "python" not in first:
+                soft(f"{skill_dir.name}: {rel} shebang does not name python ({first!r})")
+        elif f.suffix in (".sh", ".bash", ".zsh"):
+            if not first.startswith("#!"):
+                soft(f"{skill_dir.name}: {rel} has no shebang line")
+            elif not any(i in first for i in SH_INTERPRETERS):
+                soft(f"{skill_dir.name}: {rel} shebang is not a shell ({first!r})")
 
 
 def check_skill(skill_dir: Path, strict: bool = True) -> tuple[list[str], list[str]]:
@@ -186,6 +226,8 @@ def check_skill(skill_dir: Path, strict: bool = True) -> tuple[list[str], list[s
         if not (skill_dir / rel).exists():
             soft(f"{skill_dir.name}: body references `{rel}` which does not exist")
 
+    check_scripts(skill_dir, soft)
+
     for stale in ("references", "scripts", "assets"):
         d = skill_dir / stale
         if d.is_dir() and not any(d.rglob("*")):
@@ -210,6 +252,9 @@ WARNING_KINDS = (
     ("body has no", "no ## sections"),
     ("description is very short", "short description"),
     ("empty ", "empty directory"),
+    ("does not compile", "script does not compile"),
+    ("no shebang", "script without shebang"),
+    ("shebang", "wrong shebang"),
 )
 
 
