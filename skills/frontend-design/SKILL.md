@@ -103,31 +103,19 @@ Rules that prevent 90% of bad palettes:
 - Dark mode is not inverted light mode: raise surfaces slightly (`+4–8%` lightness per elevation step), desaturate accents ~10%, and keep shadows subtle/absent — use surface steps for depth.
 - Tinted near-black (`#0B0B0B`) as "black", and warm cream (`#F4F1EA`) with a clay accent are the two most common generated palettes. Use them only if the brief asks.
 
-**Check contrast with the script, not in your head.** Relative luminance on hex
-values is arithmetic, and guessing it is how a palette ships at 3.9:1:
+**Check contrast with the script, not in your head.** Guessing luminance is
+how a palette ships at 3.9:1:
 
 ```bash
 python3 scripts/contrast.py --css tokens.css   # exits 1 on any failure
 ```
 
-It reads the token sheet, so the naming convention above becomes the test: every
-`--<role>-contrast` is checked against `--<role>`, plus `text`/`muted` against
-`bg`, `text` against `surface`, and `border` against `bg` at the 3:1 UI threshold.
-shadcn's `-foreground` convention (`--card-foreground` on `--card`,
-`--foreground` on `--background`) is honored the same way, because it is the
-most-copied sheet on the internet — running it finds real issues (its dark
-`--destructive-foreground` sits at 1.66:1 on `--destructive`).
-
-Values may be hex, `rgb()`, `hsl()`, or `oklch()` — real sheets are written in
-oklch now (Tailwind v4, shadcn). Alpha (`oklch(1 0 0 / 10%)` borders) is
-composited over the pair's background, which is what actually renders.
-
-If the sheet defines the same tokens in several blocks (`:root` plus `.dark`),
-the script refuses to guess which theme you mean — pass one:
-`--block :root` and `--block .dark`, check both, fix both. Otherwise the dark
-values silently replace the light ones and the light theme is never checked.
-A failing pair means change the token, not the threshold — if the accent is too
-light for white text, darken the accent or use dark text on it.
+The naming conventions above become the test: the script derives the pairs, so
+a convention-following sheet checks itself. It reads hex/rgb()/hsl()/oklch(),
+honors shadcn's `-foreground` convention, composites translucent values, and
+refuses to guess between `:root` and `.dark` — details and failure recipes in
+references/contrast-checking.md. A failing pair means change the token, not
+the threshold.
 
 ---
 
