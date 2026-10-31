@@ -10,7 +10,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tools.validate_skills import check_skill, parse_frontmatter  # noqa: E402
+from tools.validate_skills import (  # noqa: E402
+    bucket, check_skill, discover_vendor, parse_frontmatter,
+)
 
 GOOD = """---
 name: sample-skill
@@ -157,6 +159,85 @@ class ValidatorTests(unittest.TestCase):
         self.assertTrue(any("body is empty" in e for e in errors))
 
 
+class RelaxedVendorTests(unittest.TestCase):
+    """Vendored copies: only structural problems are errors, convention is a warning."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.addCleanup(self.tmp.cleanup)
+
+    def test_style_violation_is_a_warning_not_an_error(self):
+        no_trigger = GOOD.replace(
+            " Use when the user asks for that thing.", "")
+        d = make_skill(self.root, "sample-skill", no_trigger)
+        strict_errors, _ = check_skill(d)
+        self.assertTrue(strict_errors, "strict mode should still reject it")
+        relaxed_errors, relaxed_warnings = check_skill(d, strict=False)
+        self.assertEqual(relaxed_errors, [])
+        self.assertTrue(any("state when to use" in w for w in relaxed_warnings))
+
+    def test_structural_problem_still_fails_relaxed(self):
+        wrong_name = GOOD.replace("name: sample-skill", "name: other-skill")
+        d = make_skill(self.root, "sample-skill", wrong_name)
+        relaxed_errors, _ = check_skill(d, strict=False)
+        self.assertTrue(any("does not match directory name" in e for e in relaxed_errors))
+
+    def test_missing_description_fails_relaxed(self):
+        stripped = GOOD.replace(
+            "description: Does a specific thing for the project and reports what changed. Use when the user asks for that thing.\n",
+            "")
+        d = make_skill(self.root, "sample-skill", stripped)
+        relaxed_errors, _ = check_skill(d, strict=False)
+        self.assertTrue(any("missing required field 'description'" in e for e in relaxed_errors))
+
+    def test_dangling_reference_is_a_warning_in_relaxed_mode(self):
+        dangling = GOOD + "\nSee `references/nope.md`.\n"
+        d = make_skill(self.root, "sample-skill", dangling)
+        relaxed_errors, relaxed_warnings = check_skill(d, strict=False)
+        self.assertEqual(relaxed_errors, [])
+        self.assertTrue(any("does not exist" in w for w in relaxed_warnings))
+
+
+class ReferenceScanTests(unittest.TestCase):
+    """Paths in fenced code blocks are templates, not links."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.addCleanup(self.tmp.cleanup)
+
+    def test_fenced_example_paths_are_ignored(self):
+        text = GOOD + "\n```\nscripts/tool.sh   # template\n```\n"
+        d = make_skill(self.root, "sample-skill", text)
+        errors, _ = check_skill(d)
+        self.assertEqual(errors, [])
+
+    def test_inline_paths_are_still_checked(self):
+        text = GOOD + "\nRun `scripts/tool.sh` to start.\n"
+        d = make_skill(self.root, "sample-skill", text)
+        errors, _ = check_skill(d)
+        self.assertTrue(any("scripts/tool.sh" in e for e in errors))
+
+
+class VendorDiscoveryTests(unittest.TestCase):
+    def test_finds_nested_vendor_skills_and_buckets_warnings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            nested = root / "vendor" / "lib" / "category" / "vendor-skill"
+            nested.mkdir(parents=True)
+            text = GOOD.replace("name: sample-skill", "name: vendor-skill").replace(
+                "metadata:\n  author: hexinzxq\n  version: \"1.0.0\"\n", "")
+            (nested / "SKILL.md").write_text(text, encoding="utf-8")
+            self.assertEqual(discover_vendor(root), [nested])
+            _, warnings = check_skill(nested, strict=False)
+            self.assertEqual(bucket(warnings), "1 no metadata.version")
+
+    def test_no_vendor_dir_is_empty_list(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(discover_vendor(Path(tmp)), [])
+
+
 class RealSkillsTests(unittest.TestCase):
     """The repo's own skills must pass their own validator."""
 
@@ -168,6 +249,12 @@ class RealSkillsTests(unittest.TestCase):
             with self.subTest(skill=d.name):
                 errors, _ = check_skill(d)
                 self.assertEqual(errors, [], f"{d.name}: {errors}")
+
+    def test_every_vendored_skill_is_loadable(self):
+        for d in discover_vendor(ROOT):
+            with self.subTest(skill=str(d.relative_to(ROOT))):
+                errors, _ = check_skill(d, strict=False)
+                self.assertEqual(errors, [], f"{d.relative_to(ROOT)}: {errors}")
 
 
 if __name__ == "__main__":

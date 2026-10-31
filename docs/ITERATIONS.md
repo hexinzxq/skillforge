@@ -24,3 +24,15 @@
 - 拿两个真实项目跑一遍 `ui-critique`，看它给的数值是不是真能改——评审 skill 最怕的是「说得头头是道但没有一条能落地」。
 - `design-tokens` 在彩色品牌（黄、绿）下的 ramp 是否还成体系，只测了 5 个色。
 - `test-gap` 的「说出它防哪个 bug」这一步，在真实仓库上会不会变成凑字数。
+
+## 2026-10-31 · 第 2 天 · 把 CI 从红救回来
+
+- **08:05 发现 CI 连红三次** — 昨晚 01:27–01:32 那次大改（`skills/` 换成单个 frontend-design、新增 `vendor/` 四套上游库）之后，CI 一直是 failure，没人看。
+  原文：`python3: can't open file '.../skills/design-tokens/scripts/gen_tokens.py': [Errno 2] No such file or directory` → `Process completed with exit code 2`。
+  为什么没发现：本地只跑了 validator 和 unittest，那两个确实还是绿的；红的是 workflow 里写死路径的第三步。**在本地跑「我改的那部分」，不等于跑了一遍 CI。**
+- **08:10 校验器加 vendor 模式** — `vendor/**/SKILL.md` 现在也扫（递归，因为上游按语言/框架分了子目录）。规则分两档：结构性错误（name 缺失/与目录不符、description 缺失、frontmatter 解析失败、正文为空）仍然失败，风格问题（缺 `Use when`、正文过长、缺 metadata.version）降级为警告——那是别人写的东西，要修得回上游修。
+  结果：61 个 vendor skill，0 个结构错误，50 条风格警告。其中 27 条是正文超过 220 行（上游把全部细节塞在 SKILL.md 里），20 条拿不到 version。
+- **08:14 50 条警告压成一行** — 一次打印 50 行警告的检查等于没有检查，人只会往下滚。现在按类别归并成 `vendor: 50 convention warning(s) — 27 long body, 20 no metadata.version, 2 no trigger phrase, 1 dangling reference`，`--vendor-detail` 才展开。
+- **08:16 修掉一个假阳性** — 代码块里的路径是模板不是链接（`scripts/tool.sh` 这种讲解例子），扫描前先剥掉 ` ``` ` 块。之前 upstream `writing-skills` 就因为这个被误报。
+- **08:18 修掉一个真漏洞** — 原来「缺 metadata.version」的警告写在 `if meta is not None:` 里面，所以**整块 metadata 都没写**的时候反而不警告。写测试的时候撞出来的（断言 `1 no metadata.version` 却拿到空字符串）。现在 `meta` 不存在也警告。
+- **08:20 CI 重写** — 删掉指向已删除脚本的步骤；installer 那步改成「软链装 → `test -L` → remove → `test ! -e` → 复制装 → `test -f`」。原来只测了 `--copy`，而 `--remove` 的语义（只删自己建的软链）根本没被覆盖。

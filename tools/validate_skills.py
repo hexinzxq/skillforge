@@ -12,10 +12,19 @@ Checks (errors fail the build):
   - every path mentioned in the body as references/ scripts/ assets/ exists
   - body is not empty
 
+Vendored skills (`vendor/**/SKILL.md`) are checked too, in relaxed mode: only the
+structural problems that stop a skill from loading (missing/mismatched name, no
+description, unparseable frontmatter, empty body) fail the build. Everything else
+is reported as a warning, because those files are copies of someone else's work
+and the fix has to go upstream, not here.
+
+Paths inside fenced code blocks are templates (``bash scripts/tool.sh``) and are
+not resolved, otherwise every skill that shows a layout example would fail.
+
 Warnings do not fail: long bodies (progressive-disclosure smell), a body with no
 markdown headings, missing metadata.version.
 
-    python3 tools/validate_skills.py [--root .] [--quiet]
+    python3 tools/validate_skills.py [--root .] [--quiet] [--no-vendor]
 """
 
 from __future__ import annotations
@@ -29,6 +38,8 @@ SPEC_FIELDS = {"name", "description", "license", "compatibility", "metadata", "a
 NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 RESERVED = {"claude"}
 REF_RE = re.compile(r"`((?:references|scripts|assets)/[^`\s]+)`")
+# Paths shown inside fenced code blocks are templates, not links to real files.
+FENCE_RE = re.compile(r"```.*?```", re.S)
 MAX_NAME, MAX_DESC, MAX_LICENSE, MAX_COMPAT = 64, 1024, 50, 500
 
 
@@ -85,9 +96,15 @@ def _unquote(value: str) -> str:
     return value
 
 
-def check_skill(skill_dir: Path) -> tuple[list[str], list[str]]:
+def check_skill(skill_dir: Path, strict: bool = True) -> tuple[list[str], list[str]]:
+    """Check one skill directory. In relaxed mode (vendor copies) only structural
+    problems are errors; style and convention violations become warnings."""
     errors: list[str] = []
     warnings: list[str] = []
+
+    def soft(msg: str) -> None:
+        (errors if strict else warnings).append(msg)
+
     skill_md = skill_dir / "SKILL.md"
     if not skill_md.is_file():
         return [f"{skill_dir.name}: missing SKILL.md (exact name, case-sensitive)"], warnings
@@ -102,8 +119,8 @@ def check_skill(skill_dir: Path) -> tuple[list[str], list[str]]:
 
     unknown = set(fields) - SPEC_FIELDS
     if unknown:
-        errors.append(f"{skill_dir.name}: unknown frontmatter field(s) {sorted(unknown)}; "
-                      f"allowed: {sorted(SPEC_FIELDS)}")
+        soft(f"{skill_dir.name}: unknown frontmatter field(s) {sorted(unknown)}; "
+             f"allowed: {sorted(SPEC_FIELDS)}")
 
     name = fields.get("name")
     if not isinstance(name, str) or not name:
@@ -126,34 +143,34 @@ def check_skill(skill_dir: Path) -> tuple[list[str], list[str]]:
         if len(desc) > MAX_DESC:
             errors.append(f"{skill_dir.name}: description is {len(desc)} chars (max {MAX_DESC})")
         if not re.search(r"\buse (it )?when\b", desc, re.I):
-            errors.append(f"{skill_dir.name}: description must state when to use the skill "
-                          f"(e.g. 'Use when the user asks ...')")
+            soft(f"{skill_dir.name}: description must state when to use the skill "
+                 f"(e.g. 'Use when the user asks ...')")
         if len(desc) < 40:
             warnings.append(f"{skill_dir.name}: description is very short ({len(desc)} chars); "
                             f"name the capability and the trigger")
 
     lic = fields.get("license")
     if isinstance(lic, str) and len(lic) > MAX_LICENSE:
-        errors.append(f"{skill_dir.name}: license is {len(lic)} chars (max {MAX_LICENSE})")
+        soft(f"{skill_dir.name}: license is {len(lic)} chars (max {MAX_LICENSE})")
     compat = fields.get("compatibility")
     if isinstance(compat, str) and len(compat) > MAX_COMPAT:
-        errors.append(f"{skill_dir.name}: compatibility is {len(compat)} chars (max {MAX_COMPAT})")
+        soft(f"{skill_dir.name}: compatibility is {len(compat)} chars (max {MAX_COMPAT})")
 
     meta = fields.get("metadata")
     if meta is not None:
         if not isinstance(meta, dict):
-            errors.append(f"{skill_dir.name}: metadata must be a mapping of key: value")
+            soft(f"{skill_dir.name}: metadata must be a mapping of key: value")
         else:
             for k, v in meta.items():
                 if not isinstance(v, str) or getattr(v, "yaml_typed", False):
-                    errors.append(f"{skill_dir.name}: metadata.{k} must be a string "
-                                  f"(quote values YAML would type as numbers, e.g. version: \"1\")")
-            if "version" not in meta:
-                warnings.append(f"{skill_dir.name}: metadata.version missing")
+                    soft(f"{skill_dir.name}: metadata.{k} must be a string "
+                         f"(quote values YAML would type as numbers, e.g. version: \"1\")")
+    if not isinstance(meta, dict) or "version" not in meta:
+        warnings.append(f"{skill_dir.name}: metadata.version missing")
 
     tools = fields.get("allowed-tools")
     if tools is not None and not isinstance(tools, str):
-        errors.append(f"{skill_dir.name}: allowed-tools must be a space-separated string")
+        soft(f"{skill_dir.name}: allowed-tools must be a space-separated string")
 
     if not body.strip():
         errors.append(f"{skill_dir.name}: body is empty")
@@ -165,9 +182,9 @@ def check_skill(skill_dir: Path) -> tuple[list[str], list[str]]:
             warnings.append(f"{skill_dir.name}: body is {body_lines} lines — move detail into "
                             f"references/ so it loads only when needed")
 
-    for rel in sorted(set(REF_RE.findall(body))):
+    for rel in sorted(set(REF_RE.findall(FENCE_RE.sub("", body)))):
         if not (skill_dir / rel).exists():
-            errors.append(f"{skill_dir.name}: body references `{rel}` which does not exist")
+            soft(f"{skill_dir.name}: body references `{rel}` which does not exist")
 
     for stale in ("references", "scripts", "assets"):
         d = skill_dir / stale
@@ -176,10 +193,46 @@ def check_skill(skill_dir: Path) -> tuple[list[str], list[str]]:
     return errors, warnings
 
 
+def discover_vendor(root: Path) -> list[Path]:
+    """Every directory under vendor/ that holds a SKILL.md (the upstream libraries
+    nest them by category, so one level of iterdir is not enough)."""
+    vendor = root / "vendor"
+    if not vendor.is_dir():
+        return []
+    return sorted({p.parent for p in vendor.rglob("SKILL.md") if ".git" not in p.parts})
+
+
+WARNING_KINDS = (
+    ("lines — move detail", "long body"),
+    ("metadata.version missing", "no metadata.version"),
+    ("state when to use", "no trigger phrase"),
+    ("references `", "dangling reference"),
+    ("body has no", "no ## sections"),
+    ("description is very short", "short description"),
+    ("empty ", "empty directory"),
+)
+
+
+def bucket(warnings: list[str]) -> str:
+    """Collapse 50 warnings into one readable line. A check nobody reads is dead."""
+    counts: dict[str, int] = {}
+    for w in warnings:
+        for needle, label in WARNING_KINDS:
+            if needle in w:
+                counts[label] = counts.get(label, 0) + 1
+                break
+        else:
+            counts["other"] = counts.get("other", 0) + 1
+    return ", ".join(f"{v} {k}" for k, v in sorted(counts.items(), key=lambda kv: -kv[1]))
+
+
 def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(description="validate skills against the Agent Skills spec")
     p.add_argument("--root", default=".", help="repository root (default: cwd)")
     p.add_argument("--quiet", action="store_true", help="only print problems")
+    p.add_argument("--no-vendor", action="store_true", help="skip vendor/**/SKILL.md")
+    p.add_argument("--vendor-detail", action="store_true",
+                   help="list every vendored warning instead of one summary line")
     args = p.parse_args(argv)
 
     root = Path(args.root).resolve()
@@ -202,16 +255,38 @@ def main(argv: list[str]) -> int:
         if not args.quiet:
             print(f"{'FAIL' if errors else 'ok  '} {d.name}")
 
+    vendor_dirs = [] if args.no_vendor else discover_vendor(root)
+    vendor_errors: list[str] = []
+    vendor_warnings: list[str] = []
+    for d in vendor_dirs:
+        errors, warnings = check_skill(d, strict=False)
+        rel = d.relative_to(root)
+        vendor_errors += [f"vendor: {rel}: {e}" for e in errors]
+        vendor_warnings += [f"vendor: {w}" for w in warnings]
+        if not args.quiet and errors:
+            print(f"FAIL {rel}")
+    all_errors += vendor_errors
+
     for w in all_warnings:
         print(f"warn  {w}")
+    if vendor_warnings:
+        if args.vendor_detail:
+            for w in vendor_warnings:
+                print(f"warn  {w}")
+        elif not args.quiet:
+            print(f"warn  vendor: {len(vendor_warnings)} convention warning(s) "
+                  f"across {len(vendor_dirs)} skills — {bucket(vendor_warnings)}")
+            print("      (--vendor-detail to list them; these are copies, fixes go upstream)")
     for e in all_errors:
         print(f"error {e}", file=sys.stderr)
 
     if all_errors:
-        print(f"\n{len(all_errors)} error(s), {len(all_warnings)} warning(s)", file=sys.stderr)
+        print(f"\n{len(all_errors)} error(s), "
+              f"{len(all_warnings) + len(vendor_warnings)} warning(s)", file=sys.stderr)
         return 1
     if not args.quiet:
-        print(f"\n{len(dirs)} skill(s) valid, {len(all_warnings)} warning(s)")
+        print(f"\n{len(dirs)} skill(s) valid, {len(vendor_dirs)} vendored "
+              f"({len(vendor_errors)} hard error(s))")
     return 0
 
 

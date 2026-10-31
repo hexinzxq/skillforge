@@ -19,21 +19,23 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
 
+      # Covers skills/ strictly and vendor/**/SKILL.md in relaxed mode, so a
+      # vendored copy that no longer loads can't slip in unnoticed either.
       - name: Validate every skill against the spec
         run: python3 tools/validate_skills.py
 
       - name: Unit tests (validator, parsers)
         run: python3 -m unittest discover -s tests -t . -v
 
-      - name: Token generator produces passing contrast on a sample brand
-        run: |
-          python3 skills/design-tokens/scripts/gen_tokens.py --brand "#3b82f6" --out /tmp/tokens
-          test -s /tmp/tokens/tokens.css
-          test -s /tmp/tokens/tokens.json
-
-      - name: Installer dry-run
+      # Symlink install, removal, then a copy install: the three ways someone
+      # actually installs this, and the copy one is what silently breaks when a
+      # skill directory is renamed.
+      - name: Installer end to end
         run: |
           bash install.sh --dry-run --target /tmp/skills-target
+          bash install.sh --target /tmp/skills-target
+          test -L /tmp/skills-target/frontend-design
+          bash install.sh --remove --target /tmp/skills-target
+          test ! -e /tmp/skills-target/frontend-design
           bash install.sh --target /tmp/skills-target --copy
-          test -f /tmp/skills-target/ui-critique/SKILL.md
-          bash install.sh --remove --target /tmp/skills-target >/dev/null || true
+          test -f /tmp/skills-target/frontend-design/SKILL.md
