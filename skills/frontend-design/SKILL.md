@@ -42,7 +42,7 @@ If memory or repository files contain brand tokens, fonts, or a design system, *
 Produce this block first. It is the contract the code must satisfy.
 
 ```
-PALETTE   bg / surface / text / muted / accent / accent-contrast   (6 hex + role)
+PALETTE   bg / surface / text / muted / accent / accent-contrast   (6 colors + role)
 TYPE      display + body faces, scale ratio, weights used
 GRID      max width, columns, gutter, breakpoints, baseline unit
 RHYTHM    section padding scale (e.g. 24/48/96/160)
@@ -113,6 +113,11 @@ python3 scripts/contrast.py --css tokens.css   # exits 1 on any failure
 It reads the token sheet, so the naming convention above becomes the test: every
 `--<role>-contrast` is checked against `--<role>`, plus `text`/`muted` against
 `bg`, `text` against `surface`, and `border` against `bg` at the 3:1 UI threshold.
+
+Values may be hex, `rgb()`, `hsl()`, or `oklch()` — real sheets are written in
+oklch now (Tailwind v4, shadcn). If a sheet uses other names (`--background`,
+`--foreground`), pass the pairs explicitly:
+`--pair "text:oklch(0.145 0 0) on bg:oklch(1 0 0)"`.
 A failing pair means change the token, not the threshold — if the accent is too
 light for white text, darken the accent or use dark text on it.
 

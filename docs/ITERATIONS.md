@@ -44,3 +44,7 @@
   为什么：一个跑不起来的脚本比没有脚本更坏——agent 会先怀疑自己的命令，而不是怀疑脚本。之前 `contrast.py` 就算写坏了 CI 也绿。
   填之前先撞了一次：校验器把 `scripts/__pycache__/contrast.cpython-314.pyc` 也读了，报 `is not UTF-8`。修法是只认 `.py/.sh/.bash/.zsh`、跳过 `__pycache__` 和隐藏文件——顺带说明为什么仓库里只放源码，不放产物。
   验证：6 个新用例（语法错误、缺 shebang、shell 脚本写成 python shebang、正常脚本、pyc 与 pycache 被忽略、vendor 模式下降级为警告），全套 52 个用例通过。
+- **12:47 contrast.py 认识 oklch()/rgb()/hsl() 了** — 起因是拿真实世界的 token 表实测：抓了 Tailwind v4 的 `theme.css`（510 行），颜色全是 `--color-red-500: oklch(63.7% 0.237 25.331)` 这种写法。拿一份 shadcn 风格的 oklch 表跑脚本，得到 `no --custom-property: #hex declarations found`，exit 1——一份完全合法的现代 token 表被判成「没有颜色」。只认 hex 的检查器在 2026 年等于没用。
+  修法：`parse_color()` 统一入口，函数色先剥 alpha 段（`/ 50%` 丢弃，对比度对不透明底测）再拆参数；`rgb()` 支持数字/百分制/逗号；`hsl()` 走六分位公式；`oklch()` 用 Ottosson 的 OKLab→线性 sRGB 矩阵 + gamma 编码，纯 stdlib 四十行。
+  验证方式比「看起来对」硬：拿两个有官方 sRGB 对照值的 oklch 做锚点——Tailwind red-500 算出 `(251,44,54)` 正是文档里的 `#fb2c36`，shadcn 的 `oklch(0.145 0 0)` 算出 `(10,10,10)` 正是 `#0a0a0a`；再加灰轴自洽（C=0 时 luminance 必须 = L³）。
+  顺带把报错改诚实：表里有颜色但命名不符合约定时（比如 `--background/--foreground`），exit 2 并列出见到的角色名让用户加 `--pair`，而不是装作没看见。9 个新用例，全套 61 个通过。

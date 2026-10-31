@@ -1,0 +1,14 @@
+/* Fixture: a sheet in the style real projects ship today — oklch() everywhere,
+   values lifted from shadcn/ui's neutral theme (background/foreground/border)
+   plus Tailwind v4's red-500 to prove chromatic oklch parses too.
+   None of the names follow our --<role>-contrast convention, so --css on this
+   sheet must exit 2 with "no checkable pairs" — use --pair for these names. */
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.984 0 0);
+  --border: oklch(0.922 0 0);
+  --color-red-500: oklch(63.7% 0.237 25.331);
+}

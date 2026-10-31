@@ -23,10 +23,14 @@ import contrast  # noqa: E402
 
 
 def run(*argv: str) -> tuple[int, str]:
-    buf = io.StringIO()
-    with contextlib.redirect_stdout(buf):
-        code = contrast.main(list(argv))
-    return code, buf.getvalue()
+    out, err = io.StringIO(), io.StringIO()
+    code = 0
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        try:
+            code = contrast.main(list(argv))
+        except SystemExit as exc:  # argparse errors and p.exit(2)
+            code = exc.code if isinstance(exc.code, int) else 2
+    return code, out.getvalue() + err.getvalue()
 
 
 class ReferenceValuesTests(unittest.TestCase):
@@ -116,8 +120,60 @@ class ExitCodeTests(unittest.TestCase):
         self.assertEqual(code, 1)
 
     def test_no_arguments_at_all_is_a_usage_error(self):
-        with self.assertRaises(SystemExit):
-            run()
+        code, _ = run()
+        self.assertEqual(code, 2)
+
+
+class ColorFunctionTests(unittest.TestCase):
+    """Modern sheets are written in oklch(); the checker must read them or it
+    tells the user their real project has no colors at all (this happened with
+    Tailwind v4's theme.css before parse_color grew function support)."""
+
+    def test_oklch_anchors(self):
+        self.assertEqual(contrast.parse_color("oklch(1 0 0)"), (255, 255, 255))
+        self.assertEqual(contrast.parse_color("oklch(0 0 0)"), (0, 0, 0))
+
+    def test_oklch_gray_keeps_the_L_cubed_luminance_invariant(self):
+        # For achromatic colors OKLab luminance is exactly Y = L**3.
+        rgb = contrast.parse_color("oklch(0.5 0 0)")
+        self.assertEqual(rgb[0], rgb[1], rgb[2])
+        self.assertAlmostEqual(contrast.luminance(rgb), 0.5 ** 3, places=2)
+
+    def test_tailwind_red_500_matches_its_published_srgb_value(self):
+        # oklch(63.7% 0.237 25.331) is Tailwind v4's --color-red-500, documented
+        # as #fb2c36. Percent-L and chromatic hue must both parse.
+        self.assertEqual(contrast.parse_color("oklch(63.7% 0.237 25.331)"), (251, 44, 54))
+
+    def test_shadcn_foreground_matches_published_value(self):
+        self.assertEqual(contrast.parse_color("oklch(0.145 0 0)"), (10, 10, 10))
+
+    def test_rgb_variants_and_percentages(self):
+        self.assertEqual(contrast.parse_color("rgb(255 0 0)"), (255, 0, 0))
+        self.assertEqual(contrast.parse_color("rgb(255, 0, 0)"), (255, 0, 0))
+        self.assertEqual(contrast.parse_color("rgb(100% 0% 0%)"), (255, 0, 0))
+        self.assertEqual(contrast.parse_color("rgb(255 0 0 / 50%)"), (255, 0, 0))
+
+    def test_hsl_reference_values(self):
+        self.assertEqual(contrast.parse_color("hsl(0 100% 50%)"), (255, 0, 0))
+        self.assertEqual(contrast.parse_color("hsl(120, 100%, 25%)"), (0, 128, 0))
+
+    def test_non_literal_values_are_rejected(self):
+        for bad in ("var(--x)", "color-mix(in oklch, red, blue)", "currentColor", ""):
+            with self.assertRaises(ValueError):
+                contrast.parse_color(bad)
+
+    def test_oklch_sheet_parses_but_has_no_convention_pairs(self):
+        tokens = contrast.read_tokens((FIXTURES / "tokens-oklch.css").read_text())
+        self.assertIn("--color-red-500".lstrip("-"), tokens)  # key name without dashes
+        self.assertEqual(contrast.pairs_from_tokens(tokens), [])
+        code, out = run("--css", str(FIXTURES / "tokens-oklch.css"))
+        self.assertEqual(code, 2)
+        self.assertIn("no checkable pairs", out)
+
+    def test_explicit_oklch_pair_checks_normally(self):
+        code, out = run("--pair", "text:oklch(0.145 0 0) on bg:oklch(1 0 0)")
+        self.assertEqual(code, 0)
+        self.assertIn("19.80:1", out)
 
 
 if __name__ == "__main__":
