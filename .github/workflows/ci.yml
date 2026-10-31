@@ -27,6 +27,13 @@ jobs:
       - name: Unit tests (validator, parsers)
         run: python3 -m unittest discover -s tests -t . -v
 
+      # The contrast checker is what the skill tells the model to run, so CI runs
+      # it too: a token sheet that fails 4.5:1 must never look shippable.
+      - name: Contrast checker gates a sample token sheet
+        run: |
+          python3 skills/frontend-design/scripts/contrast.py --css tests/fixtures/tokens-good.css
+          ! python3 skills/frontend-design/scripts/contrast.py --css tests/fixtures/tokens-bad.css
+
       # Symlink install, removal, then a copy install: the three ways someone
       # actually installs this, and the copy one is what silently breaks when a
       # skill directory is renamed.

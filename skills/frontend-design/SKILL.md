@@ -103,7 +103,18 @@ Rules that prevent 90% of bad palettes:
 - Dark mode is not inverted light mode: raise surfaces slightly (`+4–8%` lightness per elevation step), desaturate accents ~10%, and keep shadows subtle/absent — use surface steps for depth.
 - Tinted near-black (`#0B0B0B`) as "black", and warm cream (`#F4F1EA`) with a clay accent are the two most common generated palettes. Use them only if the brief asks.
 
-Check contrast before shipping; approximate ratio = (L1+0.05)/(L2+0.05) on relative luminance.
+**Check contrast with the script, not in your head.** Relative luminance on hex
+values is arithmetic, and guessing it is how a palette ships at 3.9:1:
+
+```bash
+python3 scripts/contrast.py --css tokens.css   # exits 1 on any failure
+```
+
+It reads the token sheet, so the naming convention above becomes the test: every
+`--<role>-contrast` is checked against `--<role>`, plus `text`/`muted` against
+`bg`, `text` against `surface`, and `border` against `bg` at the 3:1 UI threshold.
+A failing pair means change the token, not the threshold — if the accent is too
+light for white text, darken the accent or use dark text on it.
 
 ---
 
@@ -185,7 +196,7 @@ Words exist to make the interface usable, not to decorate.
 ### Ship checklist
 
 - [ ] Palette has 6 named roles; accent used once per view
-- [ ] All text ≥ 4.5:1 (large ≥ 3:1); focus ring ≥ 3:1
+- [ ] `scripts/contrast.py --css <tokens>` exits 0 (all text ≥ 4.5:1, borders and focus rings ≥ 3:1)
 - [ ] One type scale ratio; body ≥ 16px; measure ≤ 80ch
 - [ ] Every interactive element has hover / focus-visible / disabled / loading
 - [ ] Empty, error, and long-content states render correctly

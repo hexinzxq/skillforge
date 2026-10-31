@@ -36,3 +36,7 @@
 - **08:16 修掉一个假阳性** — 代码块里的路径是模板不是链接（`scripts/tool.sh` 这种讲解例子），扫描前先剥掉 ` ``` ` 块。之前 upstream `writing-skills` 就因为这个被误报。
 - **08:18 修掉一个真漏洞** — 原来「缺 metadata.version」的警告写在 `if meta is not None:` 里面，所以**整块 metadata 都没写**的时候反而不警告。写测试的时候撞出来的（断言 `1 no metadata.version` 却拿到空字符串）。现在 `meta` 不存在也警告。
 - **08:20 CI 重写** — 删掉指向已删除脚本的步骤；installer 那步改成「软链装 → `test -L` → remove → `test ! -e` → 复制装 → `test -f`」。原来只测了 `--copy`，而 `--remove` 的语义（只删自己建的软链）根本没被覆盖。
+- **08:35 加对比度脚本** — `skills/frontend-design/scripts/contrast.py`（stdlib）。
+  为什么：SKILL.md 原来写「Check contrast before shipping; approximate ratio = (L1+0.05)/(L2+0.05)」——把算术交给模型是最不该交的东西，而这条正好是 palette 最常见的翻车点。现在改成「跑脚本，别心算」，并让命名约定变成测试：每个 `--<role>-contrast` 自动对 `--<role>` 检查，`text`/`muted` 对 `bg`，`border` 对 `bg` 走 3:1。
+  验证：`--css tests/fixtures/tokens-good.css` → `all pairs pass` exit 0；`tokens-bad.css` → 2 条失败 exit 1。16 个用例钉住参考值（黑白 21:1、同色 1:1、对称性、3 位 hex、alpha 截断）与退出码，CI 里也加了一步「好例通过 + 坏例必须失败」（用 `!` 前置）。
+  顺带发现：我昨天「good」示例里的 `--border: #c9ccd4` 对白底只有 **1.61:1**，远低于 UI 边界要求的 3:1。换成 `#7b8494` 后 3.77:1。这就是写脚本的意义——肉眼完全看不出这条已经挂了。
