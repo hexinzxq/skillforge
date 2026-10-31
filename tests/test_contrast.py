@@ -162,18 +162,105 @@ class ColorFunctionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 contrast.parse_color(bad)
 
-    def test_oklch_sheet_parses_but_has_no_convention_pairs(self):
+    def test_oklch_sheet_auto_derives_shadcn_convention_pairs(self):
+        # shadcn's -foreground naming is now a first-class convention, so the
+        # same fixture that used to exit 2 ("no checkable pairs") derives real
+        # pairs — and its real border value fails the 3:1 UI threshold.
         tokens = contrast.read_tokens((FIXTURES / "tokens-oklch.css").read_text())
-        self.assertIn("--color-red-500".lstrip("-"), tokens)  # key name without dashes
-        self.assertEqual(contrast.pairs_from_tokens(tokens), [])
+        labels = [label for label, _fg, _bg, _t in contrast.pairs_from_tokens(tokens)]
+        self.assertIn("foreground on background", labels)
+        self.assertIn("primary-foreground on primary", labels)
+        self.assertIn("border on background", labels)
         code, out = run("--css", str(FIXTURES / "tokens-oklch.css"))
-        self.assertEqual(code, 2)
-        self.assertIn("no checkable pairs", out)
+        self.assertEqual(code, 1)
+        self.assertIn("border on background", out)
+        self.assertIn("1.26:1", out)
 
     def test_explicit_oklch_pair_checks_normally(self):
         code, out = run("--pair", "text:oklch(0.145 0 0) on bg:oklch(1 0 0)")
         self.assertEqual(code, 0)
         self.assertIn("19.80:1", out)
+
+
+class AlphaTests(unittest.TestCase):
+    """Dark themes ship translucent borders (`oklch(1 0 0 / 10%)`). Checking
+    them as opaque white reported 19.8:1 for a hairline that renders at 1.24:1
+    — the alpha must be composited over the pair's background."""
+
+    def test_alpha_is_composited_over_the_paired_bg(self):
+        value = contrast.ratio("oklch(1 0 0 / 10%)", "oklch(0.145 0 0)")
+        self.assertAlmostEqual(value, 1.24, delta=0.02)
+        self.assertLess(value, 3.0)  # opaque white would say 19.8:1
+
+    def test_alpha_in_rgba_and_8_digit_hex(self):
+        self.assertAlmostEqual(contrast.ratio("rgba(255, 255, 255, 0.1)", "#0a0a0a"),
+                               1.24, delta=0.02)
+        self.assertAlmostEqual(contrast.ratio("#ffffff1a", "#0a0a0a"), 1.24, delta=0.02)
+
+    def test_parse_color_still_drops_alpha_for_anchors(self):
+        self.assertEqual(contrast.parse_color("#ffffff80"), (255, 255, 255))
+        self.assertEqual(contrast.parse_color("rgba(255, 0, 0, 0.5)"), (255, 0, 0))
+        self.assertEqual(contrast.parse_color("oklch(0.985 0 0 / 90%)"),
+                         contrast.parse_color("oklch(0.985 0 0)"))
+
+
+class DualScopeTests(unittest.TestCase):
+    """Real sheets define the same names in :root and .dark. Flat last-wins
+    reading silently checked only the dark theme — or mixed light fg with dark
+    bg on sheets that override just some vars. Both must be impossible."""
+
+    DUAL = FIXTURES / "tokens-dual-scope.css"
+
+    def test_flat_read_of_dual_scope_refuses(self):
+        with self.assertRaises(ValueError) as ctx:
+            contrast.read_tokens(self.DUAL.read_text())
+        self.assertIn("--block", str(ctx.exception))
+        self.assertIn(".dark", str(ctx.exception))
+
+    def test_block_selects_each_scope(self):
+        css = self.DUAL.read_text()
+        dark = contrast.read_tokens(css, block="dark")
+        light = contrast.read_tokens(css, block=":root")
+        self.assertEqual(dark["muted-foreground"], "#71717a")
+        self.assertEqual(light["muted-foreground"], "#52525b")
+
+    def test_scope_choice_changes_the_verdict(self):
+        # light passes 4.5:1, dark fails it — scoping must be load-bearing
+        code_light, _ = run("--css", str(self.DUAL), "--block", ":root")
+        code_dark, out_dark = run("--css", str(self.DUAL), "--block", "dark")
+        self.assertEqual(code_light, 0)
+        self.assertEqual(code_dark, 1)
+        self.assertIn("muted-foreground on muted", out_dark)
+
+    def test_block_with_no_match_is_an_error(self):
+        code, out = run("--css", str(self.DUAL), "--block", "light")
+        self.assertEqual(code, 2)
+        self.assertIn("no block matching", out)
+
+    def test_cli_without_block_on_dual_scope_exits_two(self):
+        code, out = run("--css", str(self.DUAL))
+        self.assertEqual(code, 2)
+        self.assertIn("multiple blocks", out)
+
+
+class ForegroundConventionTests(unittest.TestCase):
+    def test_foreground_naming_derives_pairs_without_our_convention(self):
+        tokens = {"background": "#ffffff", "foreground": "#111111",
+                  "card": "#ffffff", "card-foreground": "#111111",
+                  "border": "#888888"}
+        labels = [label for label, _fg, _bg, _t in contrast.pairs_from_tokens(tokens)]
+        self.assertEqual(labels, ["foreground on background",
+                                  "card-foreground on card",
+                                  "border on background"])
+
+    def test_mixed_conventions_coexist(self):
+        tokens = {"bg": "#ffffff", "text": "#111111",
+                  "accent": "#1d4ed8", "accent-contrast": "#ffffff",
+                  "muted": "#f4f4f5", "muted-foreground": "#52525b"}
+        labels = [label for label, _fg, _bg, _t in contrast.pairs_from_tokens(tokens)]
+        self.assertIn("text on bg", labels)           # ours
+        self.assertIn("accent-contrast on accent", labels)  # ours
+        self.assertIn("muted-foreground on muted", labels)  # shadcn's
 
 
 if __name__ == "__main__":

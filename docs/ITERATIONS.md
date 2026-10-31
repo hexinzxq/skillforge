@@ -48,3 +48,9 @@
   修法：`parse_color()` 统一入口，函数色先剥 alpha 段（`/ 50%` 丢弃，对比度对不透明底测）再拆参数；`rgb()` 支持数字/百分制/逗号；`hsl()` 走六分位公式；`oklch()` 用 Ottosson 的 OKLab→线性 sRGB 矩阵 + gamma 编码，纯 stdlib 四十行。
   验证方式比「看起来对」硬：拿两个有官方 sRGB 对照值的 oklch 做锚点——Tailwind red-500 算出 `(251,44,54)` 正是文档里的 `#fb2c36`，shadcn 的 `oklch(0.145 0 0)` 算出 `(10,10,10)` 正是 `#0a0a0a`；再加灰轴自洽（C=0 时 luminance 必须 = L³）。
   顺带把报错改诚实：表里有颜色但命名不符合约定时（比如 `--background/--foreground`），exit 2 并列出见到的角色名让用户加 `--pair`，而不是装作没看见。9 个新用例，全套 61 个通过。
+- **13:47 双作用域表不再静默混读，shadcn 的 `-foreground` 约定成为一等公民** — 继续拿真实文件测：shadcn 仓库的 `apps/v4/app/globals.css`（462 行）。两个新发现，都来自证据：
+  1. 真实表是 `:root`（L99）+ `.dark`（L143）**双作用域同名变量**。旧的扁平 last-wins 读法会静默只取 `.dark`——浅色主题从来没被检查过；更糟的场景是 `.dark` 只覆盖部分变量时会把浅色 fg 配深色 bg，算出垃圾比值还报 PASS。现在 `read_tokens()` 先按块解析，发现同名 token 出现在多个作用域就拒绝（列出重名清单，提示 `--block :root / .dark`），`--block` 用选择器子串匹配。fixture 故意让两个作用域一个 PASS 一个 FAIL，测试证明作用域选择真的改变结论。
+  2. shadcn 全网最被抄的命名是 `--card-foreground` / `--primary-foreground`，而我们只认自家的 `-contrast` → 真实表零自动配对。现在 `-foreground` 后缀与 `foreground on background` 都自动派生，跑真实 shadcn 表直接得到 13–14 对检查。
+  顺带修掉一个假阳性：`.dark` 的 border 是 `oklch(1 0 0 / 10%)`，旧版把 alpha 丢弃当纯白算，报 19.8:1 PASS——渲染出来其实是 1.24:1。现在 `ratio()` 把 fg 的 alpha 按成对 bg 合成（`rgba(...,0.1)` 逗号旧语法这个 alpha 在第 4 参数、不在 `/` 段，是测试抓出来的）。
+  **在 shadcn 真实值上的发现**：浅色 `muted-foreground` 4.35:1（差 0.15）、浅色 `destructive-foreground` 4.37:1、深色 `destructive-foreground on destructive` **1.66:1**（红底红字）。测量代替猜测的意义就在这。
+  验证：10 个新用例（拒绝混读、--block 各作用域、作用域改变结论、无匹配报错、-foreground 派生、混合约定共存、三种 alpha 语法合成、parse_color 锚点不变），全套 71 个通过；validator 干净。

@@ -1,0 +1,17 @@
+/* Fixture: the same token names defined in two scopes — the shape every real
+   sheet ships (:root light + .dark overrides, cf. shadcn's globals.css).
+   The scopes disagree on purpose: light passes 4.5:1, dark's --muted-foreground
+   fails it. A flat last-wins read would silently take only .dark and never
+   check the light theme at all, so read_tokens() must refuse without --block. */
+:root {
+  --background: #ffffff;
+  --foreground: #111111;
+  --muted: #f4f4f5;
+  --muted-foreground: #52525b;
+}
+.dark {
+  --background: #0a0a0a;
+  --foreground: #fafafa;
+  --muted: #26262b;
+  --muted-foreground: #71717a;
+}

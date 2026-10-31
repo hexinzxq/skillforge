@@ -113,11 +113,19 @@ python3 scripts/contrast.py --css tokens.css   # exits 1 on any failure
 It reads the token sheet, so the naming convention above becomes the test: every
 `--<role>-contrast` is checked against `--<role>`, plus `text`/`muted` against
 `bg`, `text` against `surface`, and `border` against `bg` at the 3:1 UI threshold.
+shadcn's `-foreground` convention (`--card-foreground` on `--card`,
+`--foreground` on `--background`) is honored the same way, because it is the
+most-copied sheet on the internet — running it finds real issues (its dark
+`--destructive-foreground` sits at 1.66:1 on `--destructive`).
 
 Values may be hex, `rgb()`, `hsl()`, or `oklch()` — real sheets are written in
-oklch now (Tailwind v4, shadcn). If a sheet uses other names (`--background`,
-`--foreground`), pass the pairs explicitly:
-`--pair "text:oklch(0.145 0 0) on bg:oklch(1 0 0)"`.
+oklch now (Tailwind v4, shadcn). Alpha (`oklch(1 0 0 / 10%)` borders) is
+composited over the pair's background, which is what actually renders.
+
+If the sheet defines the same tokens in several blocks (`:root` plus `.dark`),
+the script refuses to guess which theme you mean — pass one:
+`--block :root` and `--block .dark`, check both, fix both. Otherwise the dark
+values silently replace the light ones and the light theme is never checked.
 A failing pair means change the token, not the threshold — if the accent is too
 light for white text, darken the accent or use dark text on it.
 

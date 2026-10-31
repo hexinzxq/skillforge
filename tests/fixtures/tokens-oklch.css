@@ -1,8 +1,10 @@
 /* Fixture: a sheet in the style real projects ship today — oklch() everywhere,
    values lifted from shadcn/ui's neutral theme (background/foreground/border)
    plus Tailwind v4's red-500 to prove chromatic oklch parses too.
-   None of the names follow our --<role>-contrast convention, so --css on this
-   sheet must exit 2 with "no checkable pairs" — use --pair for these names. */
+   The names follow shadcn's -foreground convention, so pairs_from_tokens()
+   auto-derives "foreground on background" and "border on background"; the
+   border value (shadcn's real light border) fails the 3:1 UI threshold at
+   1.26:1, which is a finding, not a parser error. */
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
