@@ -220,6 +220,33 @@ class ReferenceScanTests(unittest.TestCase):
         self.assertTrue(any("scripts/tool.sh" in e for e in errors))
 
 
+class UnreferencedSupportFileTests(unittest.TestCase):
+    """A references/ file nobody names ships as dead weight (or a lost pointer)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.addCleanup(self.tmp.cleanup)
+
+    def test_unnamed_reference_file_warns(self):
+        d = make_skill(self.root, "sample-skill", GOOD, {"references/orphan.md": "# x\n"})
+        errors, warnings = check_skill(d)
+        self.assertEqual(errors, [])
+        self.assertTrue(any("references/orphan.md` is never mentioned" in w for w in warnings))
+
+    def test_plain_text_mention_counts(self):
+        text = GOOD + "\nDetails live in references/used.md.\n"
+        d = make_skill(self.root, "sample-skill", text, {"references/used.md": "# x\n"})
+        _, warnings = check_skill(d)
+        self.assertFalse(any("references/used.md" in w for w in warnings))
+
+    def test_backticked_mention_counts(self):
+        text = GOOD + "\nSee `references/used.md`.\n"
+        d = make_skill(self.root, "sample-skill", text, {"references/used.md": "# x\n"})
+        _, warnings = check_skill(d)
+        self.assertFalse(any("references/used.md" in w for w in warnings))
+
+
 class VendorDiscoveryTests(unittest.TestCase):
     def test_finds_nested_vendor_skills_and_buckets_warnings(self):
         with tempfile.TemporaryDirectory() as tmp:
