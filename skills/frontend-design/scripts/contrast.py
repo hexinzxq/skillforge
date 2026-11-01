@@ -303,6 +303,9 @@ def main(argv: list[str]) -> int:
     p.add_argument("--block", metavar="SELECTOR",
                    help="when the sheet defines tokens in several blocks "
                         "(:root plus .dark), pick one by selector substring")
+    p.add_argument("--all-blocks", action="store_true",
+                   help="check every block that declares tokens (:root and .dark in "
+                        "turn) instead of refusing an ambiguous sheet")
     p.add_argument("--min", type=float, default=WCAG_TEXT,
                    help=f"threshold for --fg/--bg and --pair (default {WCAG_TEXT})")
     p.add_argument("--quiet", action="store_true")
@@ -318,14 +321,35 @@ def main(argv: list[str]) -> int:
             label, fg, bg = parse_pair(spec)
             parse_color(fg), parse_color(bg)
             rows.append((label, fg, bg, args.min))
+        if args.all_blocks and args.block:
+            print("error: --all-blocks checks every block; drop --block", file=sys.stderr)
+            return 2
         for path in args.css:
             css_text = Path(path).expanduser().read_text(encoding="utf-8")
-            tokens = read_tokens(css_text, args.block)
-            if not tokens:
-                print(f"{path}: no literal color declarations found "
-                      f"(hex, rgb(), hsl(), oklch())", file=sys.stderr)
-                return 1
-            rows += pairs_from_tokens(tokens)
+            if args.all_blocks:
+                merged: dict[str, dict[str, str]] = {}
+                for selector, scope in _scopes(css_text):
+                    merged.setdefault(selector, {}).update(scope)
+                if not merged:
+                    print(f"{path}: no literal color declarations found "
+                          f"(hex, rgb(), hsl(), oklch())", file=sys.stderr)
+                    return 1
+                for selector, scope in merged.items():
+                    tokens = scope
+                    pairs = pairs_from_tokens(scope)
+                    if not pairs:
+                        print(f"{path}: block {selector} has colors but no pairs from "
+                              f"the naming conventions", file=sys.stderr)
+                        continue
+                    rows += [(f"{selector} {label}", fg, bg, thr)
+                             for label, fg, bg, thr in pairs]
+            else:
+                tokens = read_tokens(css_text, args.block)
+                if not tokens:
+                    print(f"{path}: no literal color declarations found "
+                          f"(hex, rgb(), hsl(), oklch())", file=sys.stderr)
+                    return 1
+                rows += pairs_from_tokens(tokens)
     except (ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

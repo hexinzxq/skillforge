@@ -237,6 +237,18 @@ class DualScopeTests(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("no block matching", out)
 
+    def test_all_blocks_checks_each_scope_in_turn(self):
+        code, out = run("--css", str(self.DUAL), "--all-blocks")
+        self.assertEqual(code, 1)
+        self.assertIn(":root foreground on background", out)
+        self.assertIn(".dark foreground on background", out)
+        self.assertIn("muted-foreground on muted", out)
+
+    def test_all_blocks_rejects_a_block_flag(self):
+        code, out = run("--css", str(self.DUAL), "--all-blocks", "--block", ":root")
+        self.assertEqual(code, 2)
+        self.assertIn("drop --block", out)
+
     def test_cli_without_block_on_dual_scope_exits_two(self):
         code, out = run("--css", str(self.DUAL))
         self.assertEqual(code, 2)

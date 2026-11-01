@@ -57,9 +57,14 @@ The script refuses such sheets until you pick a scope:
 ```bash
 python3 scripts/contrast.py --css tokens.css --block :root
 python3 scripts/contrast.py --css tokens.css --block .dark
+python3 scripts/contrast.py --css tokens.css --all-blocks   # both, in one report
 ```
 
 Check both, fix both — a token that passes in light mode can fail in dark.
+`--all-blocks` is the one-command version: each pair is prefixed with the block
+it came from, and the exit code covers every block (this is how shadcn's real
+sheet reports light muted-foreground 4.35:1 and dark destructive-foreground
+1.66:1 together).
 
 ## When something fails
 
