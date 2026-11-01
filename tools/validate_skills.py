@@ -222,9 +222,23 @@ def check_skill(skill_dir: Path, strict: bool = True) -> tuple[list[str], list[s
             warnings.append(f"{skill_dir.name}: body is {body_lines} lines — move detail into "
                             f"references/ so it loads only when needed")
 
-    for rel in sorted(set(REF_RE.findall(FENCE_RE.sub("", body)))):
+    referenced = set(REF_RE.findall(FENCE_RE.sub("", body)))
+    for rel in sorted(referenced):
         if not (skill_dir / rel).exists():
             soft(f"{skill_dir.name}: body references `{rel}` which does not exist")
+
+    # The inverse failure: a support file that no line points at. It still ships
+    # with the skill, so it is either dead weight or a pointer someone deleted.
+    refs_dir = skill_dir / "references"
+    if refs_dir.is_dir():
+        for path in sorted(refs_dir.rglob("*")):
+            if not path.is_file() or "__pycache__" in path.parts:
+                continue
+            rel = path.relative_to(skill_dir).as_posix()
+            # A naked mention ("see references/slop-tells.md") is a real pointer
+            # even without backticks; only a file nobody names is the problem.
+            if rel not in referenced and rel not in body and path.name not in body:
+                warnings.append(f"{skill_dir.name}: `{rel}` is never mentioned in the body")
 
     check_scripts(skill_dir, soft)
 
@@ -249,6 +263,7 @@ WARNING_KINDS = (
     ("metadata.version missing", "no metadata.version"),
     ("state when to use", "no trigger phrase"),
     ("references `", "dangling reference"),
+    ("is never mentioned", "unreferenced support file"),
     ("body has no", "no ## sections"),
     ("description is very short", "short description"),
     ("empty ", "empty directory"),
