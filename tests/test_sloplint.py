@@ -154,6 +154,28 @@ class RuleTests(unittest.TestCase):
         finally:
             Path(path).unlink()
 
+    def test_dangling_var_is_a_failure_when_the_token_sheet_is_scanned(self):
+        code, out = run(str(FIXTURES / "slop-dangling.html"))
+        self.assertEqual(code, 1)
+        self.assertIn("dangling-var", out)
+        self.assertIn("--surface", out)
+        self.assertIn("--border", out)
+
+    def test_var_with_fallback_is_not_dangling(self):
+        code, out = run(str(FIXTURES / "slop-dangling.html"))
+        self.assertNotIn("--accent", out)  # declared? no - used with a fallback
+
+    def test_component_only_scan_does_not_invent_dangling_vars(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".css", delete=False) as handle:
+            handle.write(".card { background: var(--surface); }")
+            path = handle.name
+        try:
+            code, out = run(path)
+            self.assertEqual(code, 0)
+            self.assertNotIn("dangling-var", out)
+        finally:
+            Path(path).unlink()
+
     def test_missing_file_is_an_input_error(self):
         code, out = run("/nonexistent/page.html")
         self.assertEqual(code, 2)

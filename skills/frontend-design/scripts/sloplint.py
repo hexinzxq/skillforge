@@ -39,6 +39,8 @@ LAYOUT_PROP = re.compile(
 TRANSITION_DECL = re.compile(
     r"(?:^|;)\s*(transition|animation)\s*:\s*([^;]+)", re.I
 )
+VAR_USE = re.compile(r"var\(\s*--([\w-]+)\s*(,?)")
+VAR_DECL = re.compile(r"--([\w-]+)\s*:")
 
 
 class Finding:
@@ -124,6 +126,9 @@ def check_css(path: Path, line: int, css: str, focus_kind: str) -> list[Finding]
             for decl in body.split(";"):
                 if re.match(r"\s*--[\w-]+\s*:", decl):  # token declaration: literals belong here
                     continue
+                # A literal inside var(--x, #fff) is a deliberate fallback, not a
+                # component hard-coding a colour.
+                decl = re.sub(r"var\([^)]*\)", "var()", decl)
                 for color in COLOR_LITERAL.finditer(decl):
                     snippet = decl.strip().replace("\n", " ")[:60]
                     out.append(Finding(str(path), body_line, "TELL", "literal-color",
@@ -175,12 +180,32 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
 
     findings: list[Finding] = []
+    declared: set[str] = set()
+    uses: list[tuple[Path, int, str, bool]] = []
+    sources: list[tuple[Path, str]] = []
     for raw in args.paths:
         path = Path(raw).expanduser()
         if not path.is_file():
             print(f"error: no such file: {raw}", file=sys.stderr)
             return 2
         findings += scan(path)
+        text = path.read_text(encoding="utf-8")
+        sources.append((path, text))
+        for line, css in _regions(path, text):
+            declared.update(VAR_DECL.findall(css))
+            for match in VAR_USE.finditer(css):
+                uses.append((path, _line_at(css, match.start(), line),
+                             match.group(1), bool(match.group(2))))
+
+    # Only meaningful when the token sheet is part of this scan: a component file
+    # alone would "dangle" every var it legitimately inherits from :root.
+    if declared:
+        for path, line, name, has_fallback in uses:
+            if name not in declared and not has_fallback:
+                findings.append(Finding(
+                    str(path), line, "FAIL", "dangling-var",
+                    f"`var(--{name})` is never declared in this scan — it resolves to "
+                    f"nothing; declare the token or pass a fallback"))
 
     for finding in findings:
         if args.quiet and finding.severity == "TELL":
