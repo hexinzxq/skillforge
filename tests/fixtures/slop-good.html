@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Invoice run</title>
+<style>
+  :root {
+    --bg: #fafafa;
+    --surface: #ffffff;
+    --text: #111111;
+    --muted: #52525b;
+    --accent: #1d4ed8;
+    --accent-contrast: #ffffff;
+    --border: #7b8494;
+  }
+  html, body { min-height: 100dvh; background: var(--bg); color: var(--text); }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    transition: transform 160ms ease-out;
+  }
+  .card:hover { transform: translateY(-2px); }
+  .card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .label { color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+  <main>
+    <img src="chart.png" alt="Unpaid invoices by week">
+    <p class="label">4 invoices unpaid this cycle</p>
+  </main>
+</body>
+</html>

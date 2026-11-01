@@ -34,6 +34,13 @@ jobs:
           python3 skills/frontend-design/scripts/contrast.py --css tests/fixtures/tokens-good.css
           ! python3 skills/frontend-design/scripts/contrast.py --css tests/fixtures/tokens-bad.css
 
+      # Same contract for the output linter: the clean fixture must pass and the
+      # sloppy one must fail, so a broken rule can't quietly stop catching things.
+      - name: Slop linter gates a sample page
+        run: |
+          python3 skills/frontend-design/scripts/sloplint.py tests/fixtures/slop-good.html
+          ! python3 skills/frontend-design/scripts/sloplint.py tests/fixtures/slop-bad.html
+
       # Symlink install, removal, then a copy install: the three ways someone
       # actually installs this, and the copy one is what silently breaks when a
       # skill directory is renamed.

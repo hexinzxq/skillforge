@@ -204,7 +204,8 @@ Words exist to make the interface usable, not to decorate.
 - [ ] Works at 360px with no horizontal scroll
 - [ ] Keyboard-only pass: tab order logical, no traps, skip link if long
 - [ ] `prefers-reduced-motion` respected
-- [ ] No default AI tells: single-word headline accent, ALL-CAPS eyebrows, 01/02/03 markers, identical rounded cards, terracotta-on-cream, tinted-black
+- [ ] `scripts/sloplint.py <files>` exits 0; every tell it reports is waived on the record (rules and waivers: references/slop-tells.md)
+- [ ] No default AI tells a script can't see: single-word headline accent, 01/02/03 markers on non-sequential content, identical rounded cards, terracotta-on-cream, tinted-black
 - [ ] One memorable element; everything else quiet
 
 ---

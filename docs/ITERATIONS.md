@@ -54,3 +54,14 @@
   顺带修掉一个假阳性：`.dark` 的 border 是 `oklch(1 0 0 / 10%)`，旧版把 alpha 丢弃当纯白算，报 19.8:1 PASS——渲染出来其实是 1.24:1。现在 `ratio()` 把 fg 的 alpha 按成对 bg 合成（`rgba(...,0.1)` 逗号旧语法这个 alpha 在第 4 参数、不在 `/` 段，是测试抓出来的）。
   **在 shadcn 真实值上的发现**：浅色 `muted-foreground` 4.35:1（差 0.15）、浅色 `destructive-foreground` 4.37:1、深色 `destructive-foreground on destructive` **1.66:1**（红底红字）。测量代替猜测的意义就在这。
   验证：10 个新用例（拒绝混读、--block 各作用域、作用域改变结论、无匹配报错、-foreground 派生、混合约定共存、三种 alpha 语法合成、parse_color 锚点不变），全套 71 个通过；validator 干净。
+
+## 2026-11-01
+
+- **13:40 sloplint：把「不要 AI 味」变成能跑的检查** — 昨天调研发现 hallmark（周涨 11,766 星）有个 `sloplint.mjs`，把设计规则做成对生成代码的扫描。我们 SKILL.md 的 ship checklist 里「No default AI tells」那条一直是靠模型自觉——同一批规则，人家能跑，我们只能读。补上。
+  做了什么：`skills/frontend-design/scripts/sloplint.py`（stdlib），扫 HTML/CSS，两种严重级：
+  - FAIL（exit 1，机械性损坏）：`transition: all`、动画动画 layout 几何（width/height/top/left/margin/padding）、`outline: none` 且全文件无 `:focus-visible`、`100vh`、html/body 上的 `overflow-x: hidden`（掩盖真实溢出）、`<img>` 缺 `alt`。
+  - TELL（exit 0，可留痕豁免）：token 块外出现字面颜色、`text-transform: uppercase` + 字距（eyebrow tell）。
+  分级的理由：FAIL 是「确定坏了」，TELL 是「模型的默认手感」，后者需要理由才能豁免，但不能一刀切拦死。
+  细节打磨：token 声明（`--bg: #fff`）里的字面颜色豁免——否则每个主题文件都报；`html/body` 不再算主题块（拿证据说话：它们该用 var()）；`--strict` 让 TELL 也算失败，给已经有 token 层的项目用。
+  验证：新 fixture `tests/fixtures/slop-good.html`（0 findings）与 `slop-bad.html`（6 FAIL + 2 TELL），16 个新用例（每条规则、退出码、strict、quiet、缺文件、编译），全套 87 个通过；validator 干净；CI 加一步「好例通过 + 坏例必须失败」。
+  文档：`references/slop-tells.md` 写清规则表、严重级、豁免协议（留痕+理由）、以及脚本故意不查的东西（设计是否独特、状态缺失、emoji 当图标——这些要人看）；SKILL.md ship checklist 改成「跑 sloplint 且 tells 已留痕豁免」两行，正文没超预算。
