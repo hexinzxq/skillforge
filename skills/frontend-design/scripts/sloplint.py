@@ -28,8 +28,13 @@ COLOR_LITERAL = re.compile(
     r"(#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab|lab|lch)\([^)]*\))"
 )
 THEME_SELECTOR = re.compile(r":root|\[data-theme", re.I)
-ANIMATED_GEOMETRY = re.compile(
-    r"\b(?:width|height|top|left|right|bottom|margin|padding)\b", re.I
+# Animating any of these makes the browser re-layout every frame. Matching is
+# on the whole property name: `border-left-color` paints, it does not reflow,
+# and a substring match on `left` reported it as layout (found on a real blog).
+LAYOUT_PROP = re.compile(
+    r"(?:width|height|min-width|max-width|min-height|max-height|top|right|bottom|left"
+    r"|inset(?:-\w+)?|margin(?:-\w+)?|padding(?:-\w+)?"
+    r"|font-size|line-height|border-\w+-width|border-width)", re.I
 )
 TRANSITION_DECL = re.compile(
     r"(?:^|;)\s*(transition|animation)\s*:\s*([^;]+)", re.I
@@ -64,7 +69,16 @@ def _regions(path: Path, text: str) -> list[tuple[int, str]]:
     return regions
 
 
-def check_css(path: Path, line: int, css: str, focus_visible: bool) -> list[Finding]:
+def _transition_target(part: str) -> str:
+    """First token that isn't a time — the animated property, or "" if none."""
+    for token in part.strip().lower().split():
+        if re.fullmatch(r"[\d.]+m?s", token):
+            continue
+        return token
+    return ""
+
+
+def check_css(path: Path, line: int, css: str, focus_kind: str) -> list[Finding]:
     out: list[Finding] = []
     for rule in CSS_RULE.finditer(css):
         selector = " ".join(rule.group(1).split())
@@ -73,22 +87,28 @@ def check_css(path: Path, line: int, css: str, focus_visible: bool) -> list[Find
         theme = bool(THEME_SELECTOR.search(selector.split(",")[0].strip()))
 
         for decl in TRANSITION_DECL.finditer(body):
-            props = decl.group(2).strip().rstrip(";").lower()
-            if props.split()[0] == "all":
-                out.append(Finding(str(path), _line_at(css, rule.start(2) + decl.start(), line),
-                                   "FAIL", "transition-all",
+            value = decl.group(2).strip().rstrip(";")
+            line_no = _line_at(css, rule.start(2) + decl.start(), line)
+            targets = [_transition_target(part) for part in value.split(",")]
+            if "all" in targets:
+                out.append(Finding(str(path), line_no, "FAIL", "transition-all",
                                    "`transition: all` — name the properties; `all` also "
                                    "animates layout on resize"))
-            elif ANIMATED_GEOMETRY.search(props):
-                out.append(Finding(str(path), _line_at(css, rule.start(2) + decl.start(), line),
-                                   "FAIL", "animate-geometry",
-                                   f"`{decl.group(1)}` animates layout geometry ({props}) — "
-                                   f"animate transform/opacity instead"))
+            layout = [prop for prop in targets if prop != "all" and LAYOUT_PROP.fullmatch(prop)]
+            if layout:
+                out.append(Finding(str(path), line_no, "FAIL", "animate-geometry",
+                                   f"`{decl.group(1)}` animates layout geometry "
+                                   f"({', '.join(layout)}) — animate transform/opacity instead"))
 
-        if re.search(r"\boutline\s*:\s*(?:none|0)\b", body, re.I) and not focus_visible:
-            out.append(Finding(str(path), body_line, "FAIL", "no-focus-replacement",
-                               "`outline: none` with no `:focus-visible` rule anywhere — "
-                               "the keyboard loses the cursor"))
+        if re.search(r"\boutline\s*:\s*(?:none|0)\b", body, re.I):
+            if focus_kind == "none":
+                out.append(Finding(str(path), body_line, "FAIL", "no-focus-replacement",
+                                   "`outline: none` with no `:focus`/`:focus-visible` rule "
+                                   "anywhere — the keyboard loses the cursor"))
+            elif focus_kind == "focus":
+                out.append(Finding(str(path), body_line, "TELL", "focus-not-visible",
+                                   "`outline: none` replaced on `:focus` only — works, but "
+                                   "mouse clicks flash the ring too; prefer `:focus-visible`"))
 
         if re.search(r"\b(?:min-)?height\s*:\s*100vh\b", body, re.I):
             out.append(Finding(str(path), body_line, "FAIL", "viewport-vh",
@@ -132,9 +152,14 @@ def scan(path: Path) -> list[Finding]:
     findings = check_html(path, text) if path.suffix.lower() in (".html", ".htm") else []
     regions = _regions(path, text)
     joined = "\n".join(region for _line, region in regions)
-    focus_visible = ":focus-visible" in joined
+    if ":focus-visible" in joined:
+        focus_kind = "visible"
+    elif ":focus" in joined:
+        focus_kind = "focus"
+    else:
+        focus_kind = "none"
     for line, css in regions:
-        findings += check_css(path, line, css, focus_visible)
+        findings += check_css(path, line, css, focus_kind)
     return findings
 
 

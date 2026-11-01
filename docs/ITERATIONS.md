@@ -65,3 +65,8 @@
   细节打磨：token 声明（`--bg: #fff`）里的字面颜色豁免——否则每个主题文件都报；`html/body` 不再算主题块（拿证据说话：它们该用 var()）；`--strict` 让 TELL 也算失败，给已经有 token 层的项目用。
   验证：新 fixture `tests/fixtures/slop-good.html`（0 findings）与 `slop-bad.html`（6 FAIL + 2 TELL），16 个新用例（每条规则、退出码、strict、quiet、缺文件、编译），全套 87 个通过；validator 干净；CI 加一步「好例通过 + 坏例必须失败」。
   文档：`references/slop-tells.md` 写清规则表、严重级、豁免协议（留痕+理由）、以及脚本故意不查的东西（设计是否独特、状态缺失、emoji 当图标——这些要人看）；SKILL.md ship checklist 改成「跑 sloplint 且 tells 已留痕豁免」两行，正文没超预算。
+- **18:40 sloplint 拿真实文件验精度，修两处** — 写一版只是开始，拿 8 个真实 CSS 跑一遍才知道规则准不准（自己的 agentledger 前端、workspace 里的博客样式、DSH 侧边栏插件的 6 个 CSS module，共约 2000 行）。结果：
+  1. **误报**：博客 `.project { transition: border-left-color .2s, background .2s }` 被报「动画 layout 几何」。原因是子串匹配：`border-left-color` 里含 `left`。改成按逗号切出每个 transition 目标、跳过时间值、对**完整属性名**做 fullmatch（`border-left-color` 是绘制属性，不重排粉）。补回归用例。
+  2. **判太狠**：agentledger 的 `input { outline: none }` 配的是 `:focus { border-color: accent }`——键盘用户其实看得见焦点，只是鼠标点击也会闪。原来一刀切 FAIL 不对。改成三态：有 `:focus-visible` 通过；只有 `:focus` 算 TELL（focus-not-visible）；两者都没有才 FAIL。
+  另一条值得记：插件里 4 处 `uppercase + letter-spacing` 被判 eyebrow，那是表格表头/徽章的正常用法——说明这条只能算 TELL 不能算 FAIL，分级是对的。
+  验证：89 个用例通过（+2 回归），validator 干净，两个真实文件复测：博客 0 findings、agentledger 10 个 TELL 0 FAIL。

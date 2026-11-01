@@ -13,8 +13,8 @@ the skill.
 | rule | what it catches | why |
 |---|---|---|
 | `transition-all` | `transition: all` | also animates layout on resize; name the properties |
-| `animate-geometry` | transition/animation of width/height/top/left/margin/padding | layout thrash — animate `transform`/`opacity` |
-| `no-focus-replacement` | `outline: none` with no `:focus-visible` rule anywhere | the keyboard loses the cursor |
+| `animate-geometry` | transition/animation of a layout property (width/height/inset/margin/padding/font-size/line-height/border-width) | layout thrash — animate `transform`/`opacity`; paint properties like `border-left-color` are fine |
+| `no-focus-replacement` | `outline: none` with no `:focus`/`:focus-visible` rule anywhere | the keyboard loses the cursor |
 | `viewport-vh` | `height`/`min-height: 100vh` | breaks under mobile browser chrome — use `100dvh` |
 | `hidden-overflow` | `overflow-x: hidden` on `html`/`body` | masks a real horizontal overflow instead of fixing it |
 | `img-alt` | `<img>` without `alt` | screen readers announce the filename; `alt=""` only when decorative |
@@ -25,6 +25,7 @@ the skill.
 |---|---|---|
 | `literal-color` | hex/rgb/hsl/oklch literal outside a token declaration | components should reference roles, so a theme swap stays possible |
 | `eyebrow` | `text-transform: uppercase` + `letter-spacing` in one rule | tracked-out ALL-CAPS labels above every section are the generated look |
+| `focus-not-visible` | `outline: none` replaced on `:focus` only | works, but every mouse click flashes the ring — `:focus-visible` shows it only for keyboard use |
 
 `--strict` makes TELLs fail too — use it on a project that has already
 committed to a token layer, where a literal colour is a real defect.

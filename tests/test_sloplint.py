@@ -72,6 +72,18 @@ class RuleTests(unittest.TestCase):
         code, _ = self.scan_css(".a { transition: transform 160ms; }")
         self.assertEqual(code, 0)
 
+    def test_paint_transitions_are_not_layout_geometry(self):
+        # Found on a real blog: border-left-color/background repaint only.
+        code, out = self.scan_css(
+            ".p { transition: border-left-color .2s ease, background .2s ease; }")
+        self.assertEqual(code, 0)
+        self.assertNotIn("animate-geometry", out)
+
+    def test_focus_only_replacement_is_a_tell_not_a_failure(self):
+        code, out = self.scan_css(".a { outline: none; } .a:focus { outline: 2px solid red; }")
+        self.assertEqual(code, 0)
+        self.assertIn("focus-not-visible", out)
+
     def test_outline_none_without_focus_visible_fails(self):
         code, out = self.scan_css(".a { outline: none; }")
         self.assertEqual(code, 1)
