@@ -1,0 +1,10 @@
+/* Bootstrap v6 shape: one declaration carries both themes. --border keeps
+   one value, but it is checked against both backgrounds (which differ). */
+:root {
+  --gray-100: #f3f4f6;
+  --gray-900: #111827;
+  --bg: light-dark(#ffffff, #000000);
+  --text: light-dark(var(--gray-900), var(--gray-100));
+  --muted: light-dark(#6b7280, #9ca3af);
+  --border: #767676;
+}

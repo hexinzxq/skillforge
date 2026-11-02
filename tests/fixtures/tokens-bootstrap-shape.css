@@ -1,0 +1,10 @@
+/* --<role>-bg is the fill, --<role>-contrast is the text on it. --<role>-fg is
+   a foreground used on the page surface, NOT on -bg: pairing it with -bg
+   reported 36 unreadable combinations that do not exist. */
+:root {
+  --bs-primary-bg: #0087fe;
+  --bs-primary-contrast: #ffffff;
+  --bs-primary-fg: #0056c8;
+  --bs-warning-bg: light-dark(#ffc900, #6b5300);
+  --bs-warning-contrast: #1b191c;
+}

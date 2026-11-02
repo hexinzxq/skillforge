@@ -37,6 +37,16 @@ VAR_RE = re.compile(r"--([a-zA-Z0-9-]+)\s*:\s*([^;]+);")
 WCAG_TEXT, WCAG_LARGE, WCAG_UI = 4.5, 3.0, 3.0
 
 
+def _angle(token: str) -> float:
+    """Hues arrive as 240, 240deg, 4.19rad, 0.667turn, 266grad — all of them legal."""
+    text = token.strip().lower()
+    for unit, factor in (("deg", 1.0), ("grad", 0.9), ("rad", 180.0 / math.pi),
+                         ("turn", 360.0)):
+        if text.endswith(unit):
+            return float(text[: -len(unit)]) * factor
+    return float(text)
+
+
 def _num(token: str) -> float:
     """Number or percentage -> plain float (`63.7%` -> 0.637, `25.331` -> 25.331)."""
     token = token.strip().lower()
@@ -116,11 +126,11 @@ def _parse_color_alpha(value: str) -> tuple[int, int, int, float]:
         rgb = tuple(min(255, max(0, round(x))) for x in vals)
         return (rgb[0], rgb[1], rgb[2], alpha)  # type: ignore[return-value]
     if name in ("hsl", "hsla"):
-        r, g, b = _hsl_to_rgb(_num(args[0]), _num(args[1]), _num(args[2]))
+        r, g, b = _hsl_to_rgb(_angle(args[0]), _num(args[1]), _num(args[2]))
         return (r, g, b, alpha)
     if name == "oklch":
         L, c = _num(args[0]), _num(args[1])
-        h = math.radians(_num(args[2])) if len(args) > 2 else 0.0
+        h = math.radians(_angle(args[2])) if len(args) > 2 else 0.0
         r, g, b = _oklab_to_rgb(L, c * math.cos(h), c * math.sin(h))
         return (r, g, b, alpha)
     # oklab
@@ -162,24 +172,268 @@ def ratio(fg: str, bg: str) -> float:
 BLOCK_RE = re.compile(r"([^{}]+)\{([^{}]*)\}")
 
 
+COMMENT_RE = re.compile(r"/\*.*?\*/", re.S)
+
+
+def _strip_css_comments(css: str) -> str:
+    """Comments can hold braces and token names (`:root light + .dark`), which
+    would otherwise leak into selectors and make --block match prose."""
+    return COMMENT_RE.sub(lambda m: "\n" * m.group(0).count("\n"), css)
+
+
 def _scopes(css: str) -> list[tuple[str, dict[str, str]]]:
     """(selector, {name: value}) per block that holds at least one literal color,
     in document order. Nested blocks (@media …) match separately, which is how
     token sheets actually nest. Selector is normalized to its last token."""
     out: list[tuple[str, dict[str, str]]] = []
-    for sel, body in BLOCK_RE.findall(css):
+    for sel, body in BLOCK_RE.findall(_strip_css_comments(css)):
         vals: dict[str, str] = {}
         for name, value in VAR_RE.findall(body):
             value = value.strip()
-            try:
-                parse_color(value)
-            except ValueError:
-                continue
+            # Keep values we can resolve later: a literal, light-dark(a, b), or a
+            # var() chain. Anything else (color-mix, calc) is not ours to guess.
+            keep = value.lower().startswith("light-dark(") or "var(" in value
+            if not keep:
+                try:
+                    parse_color(value)
+                except ValueError:
+                    continue
             vals[name] = value
         if vals:
-            words = sel.split()
-            out.append((words[-1] if words else "?", vals))
+            # Keep the whole selector: a block can list several
+            # (`:root,\n[data-bs-theme=light] {`) and naming it after the last one
+            # hides the others from --block.
+            words = [w for w in sel.replace("\n", " ").split() if w]
+            name = " ".join(words).strip().strip(",") or "?"
+            out.append((name, vals))
     return out
+
+
+VAR_REF = re.compile(r"var\(\s*--([\w-]+)\s*(?:,\s*([^()]*(?:\([^()]*\)[^()]*)*))?\)")
+
+
+def _split_top(value: str) -> list[str]:
+    """Split on top-level commas only — `light-dark(a, b)` args contain parens."""
+    parts, depth, cur = [], 0, []
+    for ch in value:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        if ch == "," and depth == 0:
+            parts.append("".join(cur))
+            cur = []
+        else:
+            cur.append(ch)
+    parts.append("".join(cur))
+    return [part.strip() for part in parts]
+
+
+def expand_light_dark(tokens: dict[str, str]) -> list[tuple[str | None, dict[str, str]]]:
+    """`light-dark(a, b)` tokens carry both themes in one declaration.
+
+    Real sheets do this increasingly (Bootstrap 5.3's tokens are all
+    light-dark() over var() indirection), so a checker that sees one value
+    per token checks half a palette without saying so.
+    """
+    light, dark = {}, {}
+    for name, value in tokens.items():
+        text = value.strip()
+        if text.lower().startswith("light-dark(") and text.endswith(")"):
+            inner = text[len("light-dark("):-1]
+            args = _split_top(inner)
+            if len(args) == 2:
+                light[name], dark[name] = args
+                continue
+        light[name] = value
+        dark[name] = value
+    if light == dark:
+        return [(None, tokens)]
+    return [("light", light), ("dark", dark)]
+
+
+def resolve_tokens(tokens: dict[str, str], depth: int = 4) -> tuple[dict[str, str], set[str]]:
+    """Replace var(--x) with the referenced value so two-layer sheets resolve.
+
+    Returns the resolved map and the names that could not be resolved (missing
+    reference without fallback, or a cycle). Those are reported, never silently
+    treated as "no colour".
+    """
+    resolved: dict[str, str] = {}
+    unresolved: set[str] = set()
+
+    def expand(value: str, seen: tuple[str, ...], level: int) -> str | None:
+        if level > depth:
+            return None
+        def sub(match: re.Match[str]) -> str:
+            ref, fallback = match.group(1), match.group(2)
+            if ref in seen:
+                raise _Cycle()
+            if ref in tokens:
+                inner = expand(tokens[ref], seen + (ref,), level + 1)
+                if inner is None:
+                    raise _Cycle()
+                return inner
+            if fallback is not None and fallback.strip():
+                return fallback.strip()
+            raise _Cycle()
+        try:
+            return VAR_REF.sub(sub, value)
+        except _Cycle:
+            return None
+
+    for name, value in tokens.items():
+        out = expand(value, (name,), 0)
+        if out is None:
+            unresolved.add(name)
+        else:
+            resolved[name] = out
+    return resolved, unresolved
+
+
+class _Cycle(Exception):
+    pass
+
+
+def _rgb_to_oklab(rgb: tuple[int, int, int]) -> tuple[float, float, float]:
+    r, g, b = (_linearize(c / 255.0) for c in rgb)
+    l_ = (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b) ** (1 / 3)
+    m_ = (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b) ** (1 / 3)
+    s_ = (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b) ** (1 / 3)
+    return (
+        0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_,
+        1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_,
+        0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_,
+    )
+
+
+def _linearize(c: float) -> float:
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def _oklab_to_oklch(L: float, a: float, b: float) -> tuple[float, float, float]:
+    return (L, math.hypot(a, b), math.degrees(math.atan2(b, a)) % 360)
+
+
+def _oklch_to_oklab(L: float, C: float, h_deg: float) -> tuple[float, float, float]:
+    h = math.radians(h_deg)
+    return (L, C * math.cos(h), C * math.sin(h))
+
+
+MIX_SPLIT = re.compile(r"^\s*color-mix\(\s*in\s+([a-z0-9-]+)\s*,(.*)\)\s*$", re.S | re.I)
+MIX_PERCENT = re.compile(r"^(.*?)(?:\s+([\d.]+)%)?$", re.S)
+
+
+def evaluate_color(value: str, tokens: dict[str, str], depth: int = 6) -> tuple[int, int, int] | None:
+    """Resolve a token value to sRGB: literals, var() chains, and color-mix().
+
+    Bootstrap's whole palette is `color-mix(in oklch, var(--bs-white) 94%,
+    oklch(...))`, so a checker that only reads literals sees none of it.
+    """
+    if depth <= 0:
+        return None
+    try:
+        text = VAR_REF.sub(lambda m: _resolve_ref(m, tokens, depth), value.strip())
+    except (_Unresolvable, ValueError):
+        return None
+    try:
+        return parse_color(text)[:3]
+    except ValueError:
+        pass
+    match = MIX_SPLIT.match(text)
+    if not match:
+        return None
+    space = match.group(1).lower()
+    parts = _split_top(match.group(2))
+    if len(parts) != 2:
+        return None
+    colors, weights = [], []
+    for part in parts:
+        color_text, weight = MIX_PERCENT.match(part.strip()).groups()
+        rgb = evaluate_color(color_text, tokens, depth - 1)
+        if rgb is None:
+            return None
+        colors.append(rgb)
+        weights.append(float(weight) if weight else None)
+    if weights[0] is None and weights[1] is None:
+        weights = [50.0, 50.0]
+    elif weights[0] is None:
+        weights = [100.0 - weights[1], weights[1]]
+    elif weights[1] is None:
+        weights = [weights[0], 100.0 - weights[0]]
+    total = (weights[0] + weights[1]) or 1.0
+    t = weights[1] / total
+    if space in ("oklch", "oklab"):
+        lab_a = _rgb_to_oklab(colors[0])
+        lab_b = _rgb_to_oklab(colors[1])
+        if space == "oklch":
+            La, Ca, Ha = _oklab_to_oklch(*lab_a)
+            Lb, Cb, Hb = _oklab_to_oklch(*lab_b)
+            delta = (Hb - Ha + 540) % 360 - 180
+            mixed = _oklch_to_oklab(La + (Lb - La) * t, Ca + (Cb - Ca) * t, Ha + delta * t)
+        else:
+            mixed = tuple(a + (b - a) * t for a, b in zip(lab_a, lab_b))
+        return _oklab_to_rgb(*mixed)
+    mixed = tuple(round(a + (b - a) * t) for a, b in zip(colors[0], colors[1]))
+    return mixed  # type: ignore[return-value]
+
+
+def _resolve_ref(match: re.Match[str], tokens: dict[str, str], depth: int) -> str:
+    ref, fallback = match.group(1), match.group(2)
+    if ref in tokens:
+        return tokens[ref]
+    if fallback is not None and fallback.strip():
+        return fallback.strip()
+    raise _Unresolvable(ref)
+
+
+class _Unresolvable(Exception):
+    pass
+
+
+def rows_for(tokens: dict[str, str], prefix: str = "") -> tuple[
+        list[tuple[str, str, str, float]], list[str]]:
+    """Resolve var() indirection, split light-dark(), and build checkable rows.
+
+    Anything that still cannot be resolved is returned as a label so the caller
+    can report it — a token the tool could not read must not look like a pass.
+    """
+    skipped: list[str] = []
+    per_variant: list[tuple[str | None, list[tuple[str, tuple[int, int, int],
+                                                     tuple[int, int, int], float]]]] = []
+    for variant, values in expand_light_dark(tokens):
+        resolved, unresolved = resolve_tokens(values)
+        produced = []
+        for label, fg, bg, threshold in pairs_from_tokens(resolved):
+            fg_rgb = evaluate_color(fg, resolved)
+            bg_rgb = evaluate_color(bg, resolved)
+            if fg_rgb is None or bg_rgb is None:
+                skipped.append(f"{variant + ': ' if variant else ''}{prefix}{label}")
+                continue
+            produced.append((label, fg_rgb, bg_rgb, threshold))
+        skipped += [f"{prefix}--{name}" for name in sorted(unresolved)]
+        per_variant.append((variant, produced))
+
+    if len(per_variant) == 1 or per_variant[0][0] is None:
+        single = per_variant[0][1]
+        return [(f"{prefix}{label}", fg, bg, thr) for label, fg, bg, thr in single], skipped
+
+    # Only label a row with its theme when the two themes actually disagree —
+    # a sheet where one token uses light-dark() does not make @media-independent
+    # pairs differ, and printing them twice invents findings.
+    light_rows = {label: (fg, bg, thr) for label, fg, bg, thr in per_variant[0][1]}
+    dark_rows = {label: (fg, bg, thr) for label, fg, bg, thr in per_variant[1][1]}
+    rows: list[tuple[str, tuple[int, int, int], tuple[int, int, int], float]] = []
+    for label, (fg, bg, thr) in light_rows.items():
+        if label in dark_rows and dark_rows[label] == (fg, bg, thr):
+            rows.append((f"{prefix}{label}", fg, bg, thr))
+        else:
+            rows.append((f"{prefix}light: {label}", fg, bg, thr))
+    for label, (fg, bg, thr) in dark_rows.items():
+        if label in light_rows and light_rows[label] == (fg, bg, thr):
+            continue
+        rows.append((f"{prefix}dark: {label}", fg, bg, thr))
+    return rows, skipped
 
 
 def read_tokens(css: str, block: str | None = None) -> dict[str, str]:
@@ -251,6 +505,16 @@ def pairs_from_tokens(tokens: dict[str, str]) -> list[tuple[str, str, str, float
             base = name[len("on-"):]
             if base in tokens:
                 out.append((f"on-{base} over {base}", tokens[name], tokens[base], WCAG_TEXT))
+    # Bootstrap's shape is `--<role>-bg` (the fill) plus `--<role>-contrast` (the
+    # text meant to sit on it). Only that pair is safe to infer: measured on
+    # Bootstrap itself, `--<role>-fg` is a foreground used on the PAGE surface
+    # (`.fg-warning { color: var(--bs-warning-fg) }`), so pairing it with
+    # `--<role>-bg` reported 36 unreadable combinations that do not exist.
+    for name, fg in tokens.items():
+        if name.endswith("-contrast"):
+            base = name[: -len("-contrast")]
+            if f"{base}-bg" in tokens and base not in tokens:
+                out.append((f"{name} on {base}-bg", fg, tokens[f"{base}-bg"], WCAG_TEXT))
     if "border" in tokens and "bg" in tokens:
         out.append(("border on bg", tokens["border"], tokens["bg"], WCAG_UI))
     if "border" in tokens and "background" in tokens and "bg" not in tokens:
@@ -281,15 +545,26 @@ def parse_pair(spec: str) -> tuple[str, str, str]:
     return f"{lf} on {lb}", fg, bg
 
 
-def render(rows: list[tuple[str, str, str, float]]) -> tuple[str, int]:
+def ratio_rgb(fg: tuple[int, int, int], bg: tuple[int, int, int]) -> float:
+    a, b = luminance(fg), luminance(bg)
+    hi, lo = max(a, b), min(a, b)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def hexstr(rgb: tuple[int, int, int]) -> str:
+    return "#{:02x}{:02x}{:02x}".format(*rgb)
+
+
+def render(rows: list[tuple[str, tuple[int, int, int], tuple[int, int, int], float]]
+           ) -> tuple[str, int]:
     lines, failures = [], 0
     width = max((len(r[0]) for r in rows), default=0)
     for label, fg, bg, minimum in rows:
-        value = ratio(fg, bg)
+        value = ratio_rgb(fg, bg)
         ok = value >= minimum
         failures += 0 if ok else 1
         mark = "PASS" if ok else f"FAIL (needs {minimum:g}:1)"
-        lines.append(f"{label:<{width}}  {fg} on {bg}  {value:5.2f}:1  {mark}")
+        lines.append(f"{label:<{width}}  {hexstr(fg)} on {hexstr(bg)}  {value:5.2f}:1  {mark}")
     return "\n".join(lines), failures
 
 
@@ -311,16 +586,15 @@ def main(argv: list[str]) -> int:
     p.add_argument("--quiet", action="store_true")
     args = p.parse_args(argv)
 
-    rows: list[tuple[str, str, str, float]] = []
+    rows: list[tuple[str, tuple[int, int, int], tuple[int, int, int], float]] = []
+    skipped_rows: list[str] = []
     tokens: dict[str, str] = {}
     try:
         if args.fg and args.bg:
-            parse_color(args.fg), parse_color(args.bg)
-            rows.append(("custom pair", args.fg, args.bg, args.min))
+            rows.append(("custom pair", parse_color(args.fg), parse_color(args.bg), args.min))
         for spec in args.pair:
             label, fg, bg = parse_pair(spec)
-            parse_color(fg), parse_color(bg)
-            rows.append((label, fg, bg, args.min))
+            rows.append((label, parse_color(fg), parse_color(bg), args.min))
         if args.all_blocks and args.block:
             print("error: --all-blocks checks every block; drop --block", file=sys.stderr)
             return 2
@@ -335,21 +609,22 @@ def main(argv: list[str]) -> int:
                           f"(hex, rgb(), hsl(), oklch())", file=sys.stderr)
                     return 1
                 for selector, scope in merged.items():
-                    tokens = scope
-                    pairs = pairs_from_tokens(scope)
-                    if not pairs:
+                    block_rows, skipped = rows_for(scope, prefix=f"{selector} ")
+                    skipped_rows += skipped
+                    if not block_rows:
                         print(f"{path}: block {selector} has colors but no pairs from "
                               f"the naming conventions", file=sys.stderr)
                         continue
-                    rows += [(f"{selector} {label}", fg, bg, thr)
-                             for label, fg, bg, thr in pairs]
+                    rows += block_rows
             else:
                 tokens = read_tokens(css_text, args.block)
                 if not tokens:
                     print(f"{path}: no literal color declarations found "
                           f"(hex, rgb(), hsl(), oklch())", file=sys.stderr)
                     return 1
-                rows += pairs_from_tokens(tokens)
+                file_rows, skipped = rows_for(tokens)
+                skipped_rows += skipped
+                rows += file_rows
     except (ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -362,6 +637,12 @@ def main(argv: list[str]) -> int:
                   "roles seen: " + ", ".join(sorted(tokens)[:12]), file=sys.stderr)
             p.exit(2)
         p.error("nothing to check: pass --fg/--bg, --pair, or --css")
+
+    if skipped_rows:
+        shown = ", ".join(skipped_rows[:5])
+        more = "" if len(skipped_rows) <= 5 else f" … +{len(skipped_rows) - 5} more"
+        print(f"note: {len(skipped_rows)} token(s) not checked (unresolvable value): "
+              f"{shown}{more}", file=sys.stderr)
 
     out, failures = render(rows)
     print(out)

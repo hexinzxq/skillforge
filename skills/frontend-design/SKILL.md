@@ -111,7 +111,8 @@ python3 scripts/contrast.py --css tokens.css   # exits 1 on any failure
 ```
 
 The naming conventions above become the test: the script derives the pairs, so
-a convention-following sheet checks itself. It reads hex/rgb()/hsl()/oklch(),
+a convention-following sheet checks itself. It reads hex/rgb()/hsl()/oklch()
+and resolves `var()` chains, `color-mix()` and `light-dark()` (both themes),
 honors shadcn's `-foreground` convention, composites translucent values, and
 refuses to guess between `:root` and `.dark` — details and failure recipes in
 references/contrast-checking.md. A failing pair means change the token, not

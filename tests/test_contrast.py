@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import io
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -273,6 +274,82 @@ class ForegroundConventionTests(unittest.TestCase):
         self.assertIn("text on bg", labels)           # ours
         self.assertIn("accent-contrast on accent", labels)  # ours
         self.assertIn("muted-foreground on muted", labels)  # shadcn's
+
+
+class ColorMixTests(unittest.TestCase):
+    """Bootstrap's palette is `color-mix(in oklch, var(--bs-white) 94%, …)`.
+    A checker that only reads literals sees none of it."""
+
+    def test_srgb_mix_at_equal_weights(self):
+        self.assertEqual(contrast.evaluate_color(
+            "color-mix(in srgb, #000 50%, #fff 50%)", {}), (128, 128, 128))
+
+    def test_weights_are_the_second_argument_percentage(self):
+        # 94% white + 6% blue is nearly white, not a mid-blue
+        mixed = contrast.evaluate_color(
+            "color-mix(in srgb, #ffffff 94%, #0000ff)", {})
+        self.assertGreater(mixed[0], 230)
+        self.assertGreater(mixed[2], 230)
+
+    def test_oklch_mix_resolves_a_var_chain(self):
+        tokens = {"bs-white": "#ffffff", "bs-blue-500": "#0087fe"}
+        mixed = contrast.evaluate_color(
+            "color-mix(in oklch, var(--bs-white) 94%, var(--bs-blue-500))", tokens)
+        self.assertIsNotNone(mixed)
+        self.assertGreater(mixed[0], 220)  # still a tint, not the blue
+
+    def test_unknown_value_returns_none_instead_of_guessing(self):
+        self.assertIsNone(contrast.evaluate_color("color-mix(in lch, red, blue)", {}))
+        self.assertIsNone(contrast.evaluate_color("var(--missing)", {}))
+
+    def test_hue_angle_units(self):
+        # real sheets say `240deg`, `0.667turn`; only bare numbers are not enough
+        self.assertEqual(contrast.parse_color("oklch(60% 0.24 240deg)"),
+                         contrast.parse_color("oklch(60% 0.24 240)"))
+        self.assertEqual(contrast.parse_color("hsl(120deg 100% 25%)"),
+                         contrast.parse_color("hsl(120 100% 25%)"))
+
+
+class ThemeSplitTests(unittest.TestCase):
+    """light-dark(a, b) carries both themes in one declaration."""
+
+    SHEET = FIXTURES / "tokens-light-dark.css"
+
+    def test_both_themes_are_checked(self):
+        code, out = run("--css", str(self.SHEET))
+        self.assertEqual(code, 0)
+        self.assertIn("light: text on bg", out)
+        self.assertIn("dark: text on bg", out)
+        self.assertIn("#111827 on #ffffff", out)
+        self.assertIn("#f3f4f6 on #000000", out)
+
+    def test_a_pair_that_does_not_differ_is_not_printed_twice(self):
+        text = (":root { --bg: #ffffff; --text: #111111;"
+                " --accent: light-dark(#111111, #eeeeee);"
+                " --accent-contrast: #ffffff; }")
+        with tempfile.NamedTemporaryFile("w", suffix=".css", delete=False) as handle:
+            handle.write(text)
+            path = handle.name
+        try:
+            code, out = run("--css", path)
+            self.assertEqual(code, 1)  # only the accent pair disagrees
+            self.assertEqual(out.count("text on bg"), 1)  # same values: printed once
+        finally:
+            Path(path).unlink()
+
+    def test_role_contrast_is_paired_with_role_bg_only(self):
+        # `-fg` is a foreground on the page surface, so pairing it with `-bg`
+        # invents unreadable combinations (36 of them on real Bootstrap).
+        code, out = run("--css", str(FIXTURES / "tokens-bootstrap-shape.css"))
+        self.assertEqual(code, 1)
+        self.assertIn("bs-primary-contrast on bs-primary-bg", out)
+        self.assertNotIn("bs-primary-fg on bs-primary-bg", out)
+
+    def test_comments_cannot_smuggle_a_block_name(self):
+        code, out = run("--css", str(FIXTURES / "tokens-dual-scope.css"),
+                        "--block", "light")  # only appears inside a /* comment */
+        self.assertEqual(code, 2)
+        self.assertIn("no block matching", out)
 
 
 if __name__ == "__main__":

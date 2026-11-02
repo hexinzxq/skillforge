@@ -71,3 +71,35 @@ sheet reports light muted-foreground 4.35:1 and dark destructive-foreground
 Change the token, not the threshold. If the accent is too light for white
 text, darken the accent or switch to dark text on it. Never edit `--min` to
 make a report go green.
+
+## Values the sheet computes
+
+Modern sheets rarely spell a colour out. Three forms are resolved before
+checking, and anything still unknown is reported as **not checked** rather than
+counted as a pass:
+
+- `var(--x)` chains — two-layer design systems (a role token pointing at a
+  palette token) are followed up to four levels; a missing reference without a
+  fallback is listed by name.
+- `color-mix(in srgb|oklab|oklch, A p%, B)` — interpolated with real colour
+  math (OKLab matrices, hue arc for oklch). Bootstrap's entire palette is
+  built this way.
+- `light-dark(a, b)` — one declaration, two themes. Both are checked; rows are
+  prefixed `light:` / `dark:` only when the two actually disagree, so a
+  theme-independent pair is not printed twice.
+
+Hue units are honoured (`240`, `240deg`, `4.19rad`, `0.667turn`, `266grad`).
+
+## Which pairs are inferred, and which are not
+
+Inference is limited to pairings the names actually promise:
+
+- ours: `--<role>-contrast` / `--on-<role>` on `--<role>`
+- shadcn: `--<role>-foreground` on `--<role>`, `--foreground` on `--background`
+- Bootstrap: `--<role>-contrast` on `--<role>-bg`
+
+`--<role>-fg` is deliberately **not** paired with `--<role>-bg`. On real
+Bootstrap, `-fg` is a foreground used on the page surface
+(`.fg-warning { color: var(--bs-warning-fg) }`), so pairing it with the
+`-bg` fill reported 36 unreadable combinations that do not exist. Add your own
+with `--pair "text:#fff on accent:#1d4ed8"` when a sheet uses its own names.

@@ -82,3 +82,9 @@
   改法：undeclared 只在一处构成**证据**时才报——这个名字与某个已声明 token 的编辑距离 ≤2，也就是拼错了。`--accent-constrast` 会被抓（并告诉你它像 `--accent-contrast`），`--dsw-alias-label-tertiary` 不会——宿主注入和拼错在静态分析里几乎只能靠这个区分。
   第二次测量：1053 → 1，剩下那条是插件 CSS **注释里**写着 `var(--dsw-font-markdown-*)`（作者在解释 token 用法）。于是加了 CSS 注释剥离（保留换行数，行号不会飘），36 个文件 → **0 条**。
   这条的教训比代码值钱：**假阳性率高的检查等于没有检查**，而唯一的修法是真数据。101 测试通过。
+- **12:48 真实 Bootstrap 的调色板一半是算出来的** — 拿 Bootstrap 当前 main 的 `dist/css/bootstrap.css`（496 KB）测 contrast.py，第一层就卡住：83 处 `light-dark(...)`，加上 `color-mix(in oklch, var(--bs-white) 94%, oklch(60% 0.24 240deg))` 这种两层间接——脚本只认字面量，351 个 token 里能读的只有零头。真实世界现在就是这么写颜色的。
+  补了三样：`var()` 链解析（最多四层，环和缺引用会被点名为「未检查」而不是算通过）；`color-mix()` 按 OKLab 矩阵做真插值（oklch 走色相弧，srgb 走线性插值，百分比按 CSS 规则归一）；`light-dark(a, b)` 拆成两套主题各自检查。顺带发现 `240deg` 这种带单位色相以前直接抛 ValueError——真实文件里很常见。
+  一个必须诚实的地方：`light-dark` 只有一个 token 有时会让整套表被拆成两套，而不是 light/dark 有差异的行打印两遍会凭空造出重复条目。现在只有两边真的不同才加 `light:`/`dark:` 前缀。
+  还撞出两个 bug：① `_scopes` 用「选择器的最后一个词」当块名，` :root,\n[data-bs-theme=light] {` 这种多选择器块会被命名成最后一个，`--block :root` 直接找不到；② 注释里的 `:root light + .dark` 会被 BLOCK_RE 当成选择器，`--block light` 反而匹配到注释文字。前者保留完整选择器，后者先剥注释（保留换行，行号不飘）。
+  最后是**推断的边界**：一开始我把 `--<role>-fg` 和 `--<role>-bg` 配对，Bootstrap 上报了 36 条 FAIL。去看用法才发现 `.fg-warning { color: var(--bs-warning-fg) }`——`-fg` 是页面上的前景色，不是 `-bg` 上的字。这个配对是我编的，36 条全是假的，于是砍掉，只保留语义明确的 `--<role>-contrast` on `--<role>-bg`。剩下的 3 条是真的：白字在 blue-500 上 3.56:1、green-500 上 2.82:1、red-500 上 4.42:1，都低于 4.5——`--bs-primary-contrast` 确实用在选中项文字上（`--bs-datepicker-day-selected-color`）。
+  110 测试通过（+9）。
