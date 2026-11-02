@@ -77,3 +77,8 @@
 - **08:20 扫页面却不看页面自己的样式表** — 拿本地两个真实页面跑 sloplint：`blog/index.html` 一条结果都没有，`resume.html` 报了 6 条 literal-color（真的，简历页没 token 块，手写颜色——属于可豁免的 tell）。但 blog 静默不是因为干净：它第 12 行是 `<link rel="stylesheet" href="assets/styles.css">`，设计全在外部 CSS 里，而脚本只读传进来的文件。「lint 这个页面」却漏掉它的样式表，等于对现代站点没有任何用。
   修法：解析 HTML 里的 `<link rel="stylesheet">`，把本地相对路径的 CSS 一起扫（跳过 http(s)、`//`、`data:`——不联网）；按 resolve 后的绝对路径去重，同一份 CSS 被两个页面引用也只报一次。摘要行加了 `(N file(s) scanned)`，不然「干净」到底是没查还是没问题分不清——这点是这次翻出来的第二个教训：**工具必须说清楚它查了什么**。
   验证：新 fixture `slop-linked.html` + `slop-linked.css`（`transition: all` + 字面 `#ffffff`），跑 HTML 会报出 CSS 里的 transition-all 并显示 2 files；远程样式表只算 1 file。99 个测试通过。
+- **08:41 1,053 条假阳性教会我一件事：不知道就不要报** — 把 sloplint 拿去跑本机 36 个真实 CSS 文件（DSH 插件的 client 样式、自己的 blog/admin 样式），`dangling-var` 一口气报 **1,053 条 FAIL**，全是 `--dsw-*` 这类宿主运行时注入的 token——扫描集里当然没有声明，因为它们根本不在文件里。
+  之前「只要本次扫描出现过 token 声明才检查」的守门条件形同虚设：集合里有一个文件声明了 token，其余所有文件的外来 token 就全部中枪。这条规则当时就不可用。
+  改法：undeclared 只在一处构成**证据**时才报——这个名字与某个已声明 token 的编辑距离 ≤2，也就是拼错了。`--accent-constrast` 会被抓（并告诉你它像 `--accent-contrast`），`--dsw-alias-label-tertiary` 不会——宿主注入和拼错在静态分析里几乎只能靠这个区分。
+  第二次测量：1053 → 1，剩下那条是插件 CSS **注释里**写着 `var(--dsw-font-markdown-*)`（作者在解释 token 用法）。于是加了 CSS 注释剥离（保留换行数，行号不会飘），36 个文件 → **0 条**。
+  这条的教训比代码值钱：**假阳性率高的检查等于没有检查**，而唯一的修法是真数据。101 测试通过。

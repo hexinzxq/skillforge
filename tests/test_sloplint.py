@@ -154,16 +154,35 @@ class RuleTests(unittest.TestCase):
         finally:
             Path(path).unlink()
 
-    def test_dangling_var_is_a_failure_when_the_token_sheet_is_scanned(self):
+    def test_misspelled_var_is_a_failure(self):
         code, out = run(str(FIXTURES / "slop-dangling.html"))
         self.assertEqual(code, 1)
         self.assertIn("dangling-var", out)
-        self.assertIn("--surface", out)
-        self.assertIn("--border", out)
+        self.assertIn("--accent-constrast", out)
+        self.assertIn("one edit from `--accent-contrast`", out)
+
+    def test_unknown_vars_from_a_host_app_are_not_flagged(self):
+        # 1,053 findings on 36 real sheets came from flagging these; a name that
+        # is not near any declared token is far more likely inherited than wrong.
+        code, out = run(str(FIXTURES / "slop-dangling.html"))
+        self.assertNotIn("--surface", out)
+
+    def test_var_written_in_a_comment_is_not_a_reference(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".css", delete=False) as handle:
+            handle.write(":root { --accent-contrast: #fff; }\n"
+                         "/* the host reads var(--accent-contrast) here */\n"
+                         ".a { color: var(--accent-constrast); }\n")
+            path = handle.name
+        try:
+            code, out = run(path)
+            self.assertEqual(code, 1)          # the real typo on line 3
+            self.assertNotIn(":2", out)        # the comment on line 2 is silent
+        finally:
+            Path(path).unlink()
 
     def test_var_with_fallback_is_not_dangling(self):
         code, out = run(str(FIXTURES / "slop-dangling.html"))
-        self.assertNotIn("--accent", out)  # declared? no - used with a fallback
+        self.assertNotIn("var(--accent,", out)
 
     def test_component_only_scan_does_not_invent_dangling_vars(self):
         with tempfile.NamedTemporaryFile("w", suffix=".css", delete=False) as handle:

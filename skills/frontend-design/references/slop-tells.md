@@ -18,7 +18,7 @@ the skill.
 | `viewport-vh` | `height`/`min-height: 100vh` | breaks under mobile browser chrome — use `100dvh` |
 | `hidden-overflow` | `overflow-x: hidden` on `html`/`body` | masks a real horizontal overflow instead of fixing it |
 | `img-alt` | `<img>` without `alt` | screen readers announce the filename; `alt=""` only when decorative |
-| `dangling-var` | `var(--x)` where `--x` is declared nowhere in the scanned set and no fallback is given | the declaration is invalid at computed-value time — the colour simply disappears |
+| `dangling-var` | `var(--x)` is one or two edits from a token declared in this scan, and has no fallback | it is a typo — the reference resolves to nothing and the element renders with no colour |
 
 ## TELL — the default a model falls into, waivable on the record (exit 0)
 

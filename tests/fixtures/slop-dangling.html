@@ -1,12 +1,17 @@
 <!doctype html>
 <html lang="en">
 <head>
+<meta charset="utf-8">
+<title>Dangling vars</title>
 <style>
-  :root { --bg: #fafafa; --text: #111111; }
-  body { background: var(--bg); color: var(--text); }
-  .card { background: var(--surface); border: 1px solid var(--border); }
-  .ok { color: var(--accent, #1d4ed8); }
+  :root {
+    --accent-contrast: #1d4ed8;
+    --accent: #ffffff;
+  }
+  .a { color: var(--accent-constrast); }   /* typo: one edit from --accent-contrast */
+  .b { color: var(--surface); }            /* inherited from a host app: not ours to judge */
+  .c { color: var(--accent, #fff); }       /* fallback provided */
 </style>
 </head>
-<body><p class="card">x</p></body>
+<body><p class="a b c">x</p></body>
 </html>

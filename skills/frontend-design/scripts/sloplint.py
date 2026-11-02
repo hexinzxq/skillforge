@@ -154,6 +154,30 @@ def check_html(path: Path, text: str) -> list[Finding]:
     return out
 
 
+def _nearest_token(name: str, declared: set[str], limit: int = 2) -> str | None:
+    """The declared token this name is a plausible misspelling of, if any."""
+    best: tuple[int, str] | None = None
+    for candidate in declared:
+        if abs(len(candidate) - len(name)) > limit:
+            continue
+        d = _edit_distance(name, candidate)
+        if d <= limit and (best is None or d < best[0]):
+            best = (d, candidate)
+    return best[1] if best else None
+
+
+def _edit_distance(a: str, b: str) -> int:
+    """Levenshtein distance, capped by simple length check at the call site."""
+    previous = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        current = [i]
+        for j, cb in enumerate(b, 1):
+            current.append(min(previous[j] + 1, current[j - 1] + 1,
+                               previous[j - 1] + (ca != cb)))
+        previous = current
+    return previous[-1]
+
+
 def linked_stylesheets(path: Path) -> list[Path]:
     """Local stylesheets an HTML page pulls in. Linting a page but not its CSS
     reports nothing on sites whose whole design lives in a <link>."""
@@ -176,10 +200,19 @@ def linked_stylesheets(path: Path) -> list[Path]:
     return found
 
 
+COMMENT_RE = re.compile(r"/\*.*?\*/", re.S)
+
+
+def _strip_comments(css: str) -> str:
+    """Drop /* … */ but keep the newlines, so line numbers stay honest. A
+    `var(--x-*)` written in prose about the tokens is not a reference."""
+    return COMMENT_RE.sub(lambda m: "\n" * m.group(0).count("\n"), css)
+
+
 def scan(path: Path) -> list[Finding]:
     text = path.read_text(encoding="utf-8")
     findings = check_html(path, text) if path.suffix.lower() in (".html", ".htm") else []
-    regions = _regions(path, text)
+    regions = [(_line, _strip_comments(region)) for _line, region in _regions(path, text)]
     joined = "\n".join(region for _line, region in regions)
     if ":focus-visible" in joined:
         focus_kind = "visible"
@@ -223,21 +256,27 @@ def main(argv: list[str] | None = None) -> int:
         findings += scan(path)
         text = path.read_text(encoding="utf-8")
         sources.append((path, text))
-        for line, css in _regions(path, text):
+        for line, raw_css in _regions(path, text):
+            css = _strip_comments(raw_css)
             declared.update(VAR_DECL.findall(css))
             for match in VAR_USE.finditer(css):
                 uses.append((path, _line_at(css, match.start(), line),
                              match.group(1), bool(match.group(2))))
 
-    # Only meaningful when the token sheet is part of this scan: a component file
-    # alone would "dangle" every var it legitimately inherits from :root.
-    if declared:
-        for path, line, name, has_fallback in uses:
-            if name not in declared and not has_fallback:
-                findings.append(Finding(
-                    str(path), line, "FAIL", "dangling-var",
-                    f"`var(--{name})` is never declared in this scan — it resolves to "
-                    f"nothing; declare the token or pass a fallback"))
+    # Measured on 36 real stylesheets: flagging every undeclared var produced
+    # 1,053 findings, because host apps inject runtime tokens (--dsw-*) and the
+    # scan cannot see them. An undeclared name is only evidence of a bug when it
+    # is one or two edits away from a token we can actually see - that is a typo,
+    # not an inherited token.
+    for path, line, name, has_fallback in uses:
+        if name in declared or has_fallback:
+            continue
+        near = _nearest_token(name, declared)
+        if near is not None:
+            findings.append(Finding(
+                str(path), line, "FAIL", "dangling-var",
+                f"`var(--{name})` is not declared and is one edit from "
+                f"`--{near}` — probably a typo; that reference resolves to nothing"))
 
     for finding in findings:
         if args.quiet and finding.severity == "TELL":
