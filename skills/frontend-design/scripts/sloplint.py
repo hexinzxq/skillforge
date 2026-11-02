@@ -23,6 +23,8 @@ from pathlib import Path
 STYLE_BLOCK = re.compile(r"<style[^>]*>(.*?)</style>", re.S | re.I)
 STYLE_ATTR = re.compile(r'\sstyle="([^"]*)"', re.I)
 IMG_TAG = re.compile(r"<img\b[^>]*>", re.I)
+LINK_TAG = re.compile(r"<link\b[^>]*>", re.I)
+HREF_ATTR = re.compile(r'\bhref\s*=\s*["\']([^"\']+)["\']', re.I)
 CSS_RULE = re.compile(r"([^{}]+)\{([^{}]*)\}", re.S)
 COLOR_LITERAL = re.compile(
     r"(#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab|lab|lch)\([^)]*\))"
@@ -152,6 +154,28 @@ def check_html(path: Path, text: str) -> list[Finding]:
     return out
 
 
+def linked_stylesheets(path: Path) -> list[Path]:
+    """Local stylesheets an HTML page pulls in. Linting a page but not its CSS
+    reports nothing on sites whose whole design lives in a <link>."""
+    if path.suffix.lower() not in (".html", ".htm"):
+        return []
+    text = path.read_text(encoding="utf-8")
+    found: list[Path] = []
+    for tag in LINK_TAG.finditer(text):
+        if "stylesheet" not in tag.group(0).lower():
+            continue
+        match = HREF_ATTR.search(tag.group(0))
+        if not match:
+            continue
+        href = match.group(1)
+        if href.startswith(("http://", "https://", "//", "data:")):
+            continue
+        candidate = (path.parent / href.split("?")[0]).resolve()
+        if candidate.is_file() and candidate not in found:
+            found.append(candidate)
+    return found
+
+
 def scan(path: Path) -> list[Finding]:
     text = path.read_text(encoding="utf-8")
     findings = check_html(path, text) if path.suffix.lower() in (".html", ".htm") else []
@@ -183,11 +207,19 @@ def main(argv: list[str] | None = None) -> int:
     declared: set[str] = set()
     uses: list[tuple[Path, int, str, bool]] = []
     sources: list[tuple[Path, str]] = []
+    queue: list[Path] = []
     for raw in args.paths:
         path = Path(raw).expanduser()
         if not path.is_file():
             print(f"error: no such file: {raw}", file=sys.stderr)
             return 2
+        queue.append(path)
+        queue.extend(linked_stylesheets(path))
+    seen_paths: set[Path] = set()
+    for path in queue:
+        if path.resolve() in seen_paths:
+            continue
+        seen_paths.add(path.resolve())
         findings += scan(path)
         text = path.read_text(encoding="utf-8")
         sources.append((path, text))
@@ -216,9 +248,11 @@ def main(argv: list[str] | None = None) -> int:
     tells = [f for f in findings if f.severity == "TELL"]
     if fails or (tells and args.strict):
         print(f"\n{len(fails)} failure(s), {len(tells)} tell(s) — fix failures; "
-              f"waive tells on the record.", file=sys.stderr)
+              f"waive tells on the record ({len(seen_paths)} file(s) scanned).",
+              file=sys.stderr)
         return 1
-    print(f"\nclean: {len(tells)} tell(s) wairable, 0 failures.")
+    print(f"\nclean: {len(tells)} tell(s) wairable, 0 failures "
+          f"({len(seen_paths)} file(s) scanned).")
     return 0
 
 

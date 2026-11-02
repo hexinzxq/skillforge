@@ -176,6 +176,25 @@ class RuleTests(unittest.TestCase):
         finally:
             Path(path).unlink()
 
+    def test_html_follows_its_local_stylesheet(self):
+        code, out = run(str(FIXTURES / "slop-linked.html"))
+        self.assertEqual(code, 1)
+        self.assertIn("slop-linked.css", out)   # found through <link>, not passed in
+        self.assertIn("transition-all", out)
+        self.assertIn("2 file(s) scanned", out)
+
+    def test_remote_stylesheets_are_not_fetched(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False) as handle:
+            handle.write('<html><head><link rel="stylesheet" '
+                         'href="https://example.com/x.css"></head></html>')
+            path = handle.name
+        try:
+            code, out = run(path)
+            self.assertEqual(code, 0)
+            self.assertIn("1 file(s) scanned", out)
+        finally:
+            Path(path).unlink()
+
     def test_missing_file_is_an_input_error(self):
         code, out = run("/nonexistent/page.html")
         self.assertEqual(code, 2)

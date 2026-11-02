@@ -70,3 +70,10 @@
   2. **判太狠**：agentledger 的 `input { outline: none }` 配的是 `:focus { border-color: accent }`——键盘用户其实看得见焦点，只是鼠标点击也会闪。原来一刀切 FAIL 不对。改成三态：有 `:focus-visible` 通过；只有 `:focus` 算 TELL（focus-not-visible）；两者都没有才 FAIL。
   另一条值得记：插件里 4 处 `uppercase + letter-spacing` 被判 eyebrow，那是表格表头/徽章的正常用法——说明这条只能算 TELL 不能算 FAIL，分级是对的。
   验证：89 个用例通过（+2 回归），validator 干净，两个真实文件复测：博客 0 findings、agentledger 10 个 TELL 0 FAIL。
+
+## 2026-11-02
+
+- **08:12 断网日补记** — 11-01 的 5 次迭代在 18:50 后全卡在本地（GitHub `SSL_ERROR_SYSCALL` 四小时，重试 10+ 次全失败）。今早 08:00 线路恢复，`683a857..303a4ab` 一次推完，CI 绿。教训：推送失败不是「工作没做」，但**恢复后第一件事必须是推**，所以把 `pending_push` 写进了 `state/current_week.json`，让下一个窗口先看它再谈迭代。
+- **08:20 扫页面却不看页面自己的样式表** — 拿本地两个真实页面跑 sloplint：`blog/index.html` 一条结果都没有，`resume.html` 报了 6 条 literal-color（真的，简历页没 token 块，手写颜色——属于可豁免的 tell）。但 blog 静默不是因为干净：它第 12 行是 `<link rel="stylesheet" href="assets/styles.css">`，设计全在外部 CSS 里，而脚本只读传进来的文件。「lint 这个页面」却漏掉它的样式表，等于对现代站点没有任何用。
+  修法：解析 HTML 里的 `<link rel="stylesheet">`，把本地相对路径的 CSS 一起扫（跳过 http(s)、`//`、`data:`——不联网）；按 resolve 后的绝对路径去重，同一份 CSS 被两个页面引用也只报一次。摘要行加了 `(N file(s) scanned)`，不然「干净」到底是没查还是没问题分不清——这点是这次翻出来的第二个教训：**工具必须说清楚它查了什么**。
+  验证：新 fixture `slop-linked.html` + `slop-linked.css`（`transition: all` + 字面 `#ffffff`），跑 HTML 会报出 CSS 里的 transition-all 并显示 2 files；远程样式表只算 1 file。99 个测试通过。
