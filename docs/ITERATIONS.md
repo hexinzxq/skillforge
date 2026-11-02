@@ -92,3 +92,9 @@
   三个修法，每个都对着真实数字验证：① 每个 block 一行 → 汇总成一行（Bootstrap 249 个空 block，现在一行说完）；② 未解析 token 只报「像颜色」的（名字含 color/bg/fg/border/contrast…，或值本身能解析成颜色；shadow/gradient/font/spacing 一律排除）——832 → 47，剩下的 47 条看一眼源码确实是真读不了：`color-mix(in srgb, var(--bs-table-color) var(--bs-table-striped-bg-factor), transparent)`，百分比是变量还混了 transparent，报「未检查」才是诚实的；③ 最关键的，`--all-blocks` 之前对每个 block **独立解析 var()**，而 utility block 的 `var(--brand)` 指向 `:root` 里的声明——所以全被判成读不了。改成「解析用全表合并的 token，派生配对只用本 block」，这才是 CSS 层叠的实际语义。47 条里剩下的都是真·无解，不是工具蠢。
   顺带修掉选择器污染：`@charset "UTF-8"; :root` 这种把 at-rule 语句当成选择器一部分的问题（截到最后一个分号之后），不然 `--block :root` 永远匹配不上。
   260 行 → 20 行，3 条真失败仍然在。115 测试通过（+5）。
+- **18:41 安装脚本看不见 vendor 里那 61 个 skill** — `./install.sh --list` 只列出一个 `frontend-design`，可仓库里明明抄了 61 个别人的 skill（`vendor/` 下），README 也整节介绍它们。原因很蠢：发现逻辑是 `for d in "$SKILLS_SRC"/*/`，只 glob 一层自己的 skill 目录。
+  修的时候发现 vendor 的目录深度还不统一（`vendor/x/SKILL.md`、`vendor/lib/name/SKILL.md`、`vendor/lib/group/name/SKILL.md` 三种），所以改成 `find -name SKILL.md` 全量走。61 个里有两份同名 `test-driven-development`（superpowers 和 agent-skills 各一份），同名以自己写的优先、其次按路径排序取第一个，`--list` 两边都列。
+  另一个设计决定：默认**只装自己写的**，`--vendor` 才把 61 个一起装。默认给别人的机器塞 61 个软链太粗暴了；`--list` 反过来总是全列（列表说的是「仓库里有什么」，安装说的是「装什么」）。
+  `--remove` 顺带静音：原来会打印 60 行「skip X: not installed」，卸载只该说真卸掉了什么。
+  自测时事故：跑 `./install.sh` 验证默认行为时忘了 `--target`，真的把 frontend-design 软链进了 `~/.claude/skills`（并创建了 `~/.claude`）。已删掉链接和空目录恢复原状。教训：测安装脚本一律带 `--target /tmp/...`，这一次记住了。
+  CI 加一步「vendor 路径」：`--list` 必须同时出现自己的和 vendor 的、`--vendor --only common-accessibility` 装完是 1 个软链且指向嵌套目录——一层 glob 的写法会在这步直接失败。

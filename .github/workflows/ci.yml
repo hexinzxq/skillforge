@@ -53,3 +53,13 @@ jobs:
           test ! -e /tmp/skills-target/frontend-design
           bash install.sh --target /tmp/skills-target --copy
           test -f /tmp/skills-target/frontend-design/SKILL.md
+      # Vendored skills live at mixed depths; if discovery only globs one level
+      # they silently vanish from --list and from the install.
+      - name: Installer vendor path
+        run: |
+          ./install.sh --list | grep -q "^  frontend-design"
+          ./install.sh --list | grep -q "^  common-accessibility"
+          bash install.sh --vendor --only common-accessibility --target /tmp/skills-vendor
+          test -L /tmp/skills-vendor/common-accessibility
+          test -f /tmp/skills-vendor/common-accessibility/SKILL.md
+          test "$(find /tmp/skills-vendor -maxdepth 1 -mindepth 1 | wc -l)" -eq 1

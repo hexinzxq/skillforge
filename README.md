@@ -14,12 +14,17 @@ cd skillforge
 ./install.sh                          # 软链到 ~/.claude/skills
 ./install.sh --project ~/code/app     # 装进某个项目的 .claude/skills
 ./install.sh --only frontend-design   # 只装一个
+./install.sh --vendor                 # 连 vendor/ 里那 61 个一起装
 ./install.sh --copy                   # 复制而不是软链
 ./install.sh --list                   # 看这仓库里有什么
 ./install.sh --remove                 # 卸掉（只删自己建的软链）
 ```
 
 软链是默认的：改了仓库里的文件，agent 下次读到的就是新版。
+
+默认只装 `skills/` 里自己写的那个；`--vendor` 才把收录的 61 个一起装上。
+同名的以自己写的为准（比如 `test-driven-development` 在 superpowers 和
+agent-skills 里各有一份，只装排在前面那个），`--list` 会把两边的都列出来。
 
 ## 有什么
 
