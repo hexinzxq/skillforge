@@ -276,6 +276,57 @@ class ForegroundConventionTests(unittest.TestCase):
         self.assertIn("muted-foreground on muted", labels)  # shadcn's
 
 
+class UncheckedReportingTests(unittest.TestCase):
+    def test_non_color_tokens_are_not_reported_as_unchecked(self):
+        sheet = (":root { --bg: #ffffff; --text: #111111;"
+                 " --box-shadow: 0 1px 2px rgba(0,0,0,.1);"
+                 " --timing: cubic-bezier(.2,.8,.2,1);"
+                 " --unknown-thing: var(--missing); }")
+        with tempfile.NamedTemporaryFile("w", suffix=".css", delete=False) as handle:
+            handle.write(sheet)
+            path = handle.name
+        try:
+            code, out = run("--css", path)
+            self.assertEqual(code, 0)
+            self.assertNotIn("not checked", out)
+        finally:
+            Path(path).unlink()
+
+    def test_a_colour_token_that_cannot_resolve_is_reported(self):
+        sheet = ":root { --bg: #ffffff; --text: #111; --accent: var(--gone); --accent-contrast: #fff; }"
+        with tempfile.NamedTemporaryFile("w", suffix=".css", delete=False) as handle:
+            handle.write(sheet)
+            path = handle.name
+        try:
+            code, out = run("--css", path)
+            self.assertIn("not checked", out)
+            self.assertIn("--accent", out)
+        finally:
+            Path(path).unlink()
+
+
+class CascadeTests(unittest.TestCase):
+    """--all-blocks must follow the cascade, not read each block in isolation."""
+
+    SHEET = FIXTURES / "tokens-cascade.css"
+
+    def test_utility_block_resolves_root_tokens(self):
+        code, out = run("--css", str(self.SHEET), "--all-blocks")
+        self.assertEqual(code, 0)
+        self.assertIn(".card accent-contrast on accent", out)
+        self.assertNotIn("not checked", out)  # --brand came from :root
+
+    def test_at_rule_statements_are_not_part_of_the_selector(self):
+        _, out = run("--css", str(self.SHEET), "--all-blocks")
+        self.assertNotIn("@charset", out)
+        self.assertNotIn("@layer", out)
+
+    def test_blocks_without_pairs_are_summarized_once(self):
+        _, out = run("--css", str(self.SHEET), "--all-blocks")
+        self.assertIn("2 block(s) declare colours but no pair", out)
+        self.assertEqual(out.count("declare colours but no pair"), 1)
+
+
 class ColorMixTests(unittest.TestCase):
     """Bootstrap's palette is `color-mix(in oklch, var(--bs-white) 94%, …)`.
     A checker that only reads literals sees none of it."""

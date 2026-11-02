@@ -1,0 +1,15 @@
+/* Bootstrap shape: at-rule statements before a block, and utility blocks whose
+   var() points at :root. Per-block resolution calls those unresolved. */
+@charset "UTF-8";
+@layer base, components;
+:root {
+  --brand: #1d4ed8;
+  --surface: #ffffff;
+}
+.card {
+  --accent: var(--brand);
+  --accent-contrast: #ffffff;
+}
+mark {
+  --mark-bg: #ffff00;
+}

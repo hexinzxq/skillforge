@@ -205,6 +205,10 @@ def _scopes(css: str) -> list[tuple[str, dict[str, str]]]:
             # hides the others from --block.
             words = [w for w in sel.replace("\n", " ").split() if w]
             name = " ".join(words).strip().strip(",") or "?"
+            # BLOCK_RE starts at the previous `}`, so an at-rule statement
+            # (@charset "UTF-8"; @layer a, b;) lands in front of the selector.
+            if ";" in name:
+                name = name.rsplit(";", 1)[1].strip() or name
             out.append((name, vals))
     return out
 
@@ -391,7 +395,40 @@ class _Unresolvable(Exception):
     pass
 
 
-def rows_for(tokens: dict[str, str], prefix: str = "") -> tuple[
+COLORISH_NAME = re.compile(
+    r"(^|[-_])(color|colours?|bg|background|fg|foreground|text|border|contrast|"
+    r"accent|primary|secondary|muted|surface|line|fill|stroke)([-_]|$)", re.I)
+COLORISH_VALUE = re.compile(
+    r"#[0-9a-fA-F]{3,8}\b|\b(rgb|rgba|hsl|hsla|oklch|oklab|color-mix|light-dark)\(",
+    re.I)
+
+
+NON_COLOR_NAME = re.compile(
+    r"(shadow|gradient|blur|font|spacing|radius|z-?index|opacity|duration|"
+    r"timing|transform|ease|transition|animation|size|width|height)", re.I)
+
+
+def _looks_like_color(name: str, value: str) -> bool:
+    """Only report tokens that were plausibly meant to be colours.
+
+    A Bootstrap sheet has 832 tokens; most are box-shadows, font stacks and
+    timings (a shadow value even contains rgb(), which is why matching on the
+    value alone is not enough). Listing those as "not checked" buries the gaps
+    that matter.
+    """
+    if NON_COLOR_NAME.search(name):
+        return False
+    if COLORISH_NAME.search(name):
+        return True
+    try:
+        parse_color((value or "").strip())
+        return True
+    except ValueError:
+        return False
+
+
+def rows_for(tokens: dict[str, str], prefix: str = "",
+             pool: dict[str, str] | None = None) -> tuple[
         list[tuple[str, str, str, float]], list[str]]:
     """Resolve var() indirection, split light-dark(), and build checkable rows.
 
@@ -402,16 +439,23 @@ def rows_for(tokens: dict[str, str], prefix: str = "") -> tuple[
     per_variant: list[tuple[str | None, list[tuple[str, tuple[int, int, int],
                                                      tuple[int, int, int], float]]]] = []
     for variant, values in expand_light_dark(tokens):
-        resolved, unresolved = resolve_tokens(values)
+        # The cascade: a utility block's var() may point at :root's token, so
+        # resolve against the whole sheet but only derive pairs in this block.
+        scope = dict(pool or {})
+        scope.update(values)
+        resolved, unresolved = resolve_tokens(scope)
+        block = {name: resolved.get(name, value) for name, value in values.items()}
+        unresolved = {name for name in unresolved if name in values}
         produced = []
-        for label, fg, bg, threshold in pairs_from_tokens(resolved):
+        for label, fg, bg, threshold in pairs_from_tokens(block):
             fg_rgb = evaluate_color(fg, resolved)
             bg_rgb = evaluate_color(bg, resolved)
             if fg_rgb is None or bg_rgb is None:
                 skipped.append(f"{variant + ': ' if variant else ''}{prefix}{label}")
                 continue
             produced.append((label, fg_rgb, bg_rgb, threshold))
-        skipped += [f"{prefix}--{name}" for name in sorted(unresolved)]
+        skipped += [f"{prefix}--{name}" for name in sorted(unresolved)
+                    if _looks_like_color(name, values.get(name, ""))]
         per_variant.append((variant, produced))
 
     if len(per_variant) == 1 or per_variant[0][0] is None:
@@ -608,14 +652,23 @@ def main(argv: list[str]) -> int:
                     print(f"{path}: no literal color declarations found "
                           f"(hex, rgb(), hsl(), oklch())", file=sys.stderr)
                     return 1
+                empty_blocks: list[str] = []
+                pool: dict[str, str] = {}
+                for scope in merged.values():
+                    pool.update(scope)
                 for selector, scope in merged.items():
-                    block_rows, skipped = rows_for(scope, prefix=f"{selector} ")
+                    block_rows, skipped = rows_for(scope, prefix=f"{selector} ", pool=pool)
                     skipped_rows += skipped
                     if not block_rows:
-                        print(f"{path}: block {selector} has colors but no pairs from "
-                              f"the naming conventions", file=sys.stderr)
+                        empty_blocks.append(selector)
                         continue
                     rows += block_rows
+                if empty_blocks:
+                    shown = ", ".join(empty_blocks[:3])
+                    more = "" if len(empty_blocks) <= 3 else f" … +{len(empty_blocks) - 3}"
+                    print(f"{path}: {len(empty_blocks)} block(s) declare colours but no "
+                          f"pair follows the naming conventions: {shown}{more}",
+                          file=sys.stderr)
             else:
                 tokens = read_tokens(css_text, args.block)
                 if not tokens:

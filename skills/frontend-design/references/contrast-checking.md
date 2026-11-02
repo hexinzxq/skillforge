@@ -103,3 +103,11 @@ Bootstrap, `-fg` is a foreground used on the page surface
 (`.fg-warning { color: var(--bs-warning-fg) }`), so pairing it with the
 `-bg` fill reported 36 unreadable combinations that do not exist. Add your own
 with `--pair "text:#fff on accent:#1d4ed8"` when a sheet uses its own names.
+
+In `--all-blocks` mode the blocks are read as one cascade: a utility block
+whose `var()` points at `:root` resolves (before this, every utility block on
+Bootstrap showed up as 832 "not checked" tokens). Blocks that declare colours
+but follow no convention are summarized in one line instead of one line each —
+Bootstrap's sheet has 249 of them. Non-colour tokens (shadows, timings, font
+stacks) are never listed as unchecked, because a shadow value contains `rgb()`
+and would otherwise look like a colour.

@@ -88,3 +88,7 @@
   还撞出两个 bug：① `_scopes` 用「选择器的最后一个词」当块名，` :root,\n[data-bs-theme=light] {` 这种多选择器块会被命名成最后一个，`--block :root` 直接找不到；② 注释里的 `:root light + .dark` 会被 BLOCK_RE 当成选择器，`--block light` 反而匹配到注释文字。前者保留完整选择器，后者先剥注释（保留换行，行号不飘）。
   最后是**推断的边界**：一开始我把 `--<role>-fg` 和 `--<role>-bg` 配对，Bootstrap 上报了 36 条 FAIL。去看用法才发现 `.fg-warning { color: var(--bs-warning-fg) }`——`-fg` 是页面上的前景色，不是 `-bg` 上的字。这个配对是我编的，36 条全是假的，于是砍掉，只保留语义明确的 `--<role>-contrast` on `--<role>-bg`。剩下的 3 条是真的：白字在 blue-500 上 3.56:1、green-500 上 2.82:1、red-500 上 4.42:1，都低于 4.5——`--bs-primary-contrast` 确实用在选中项文字上（`--bs-datepicker-day-selected-color`）。
   110 测试通过（+9）。
+- **13:52 `--all-blocks` 在真实的 Bootstrap 上是不可读的** — 一条命令跑 Bootstrap 的 496 KB 表，输出 260 行，其中 259 行是「这个 block 有颜色但没有可检查的配对」，真正的结果淹没在里面。更要命的是「note: 832 token(s) not checked」——那 832 个里绝大多数是 box-shadow、字体栈、缓动函数，根本不是颜色。
+  三个修法，每个都对着真实数字验证：① 每个 block 一行 → 汇总成一行（Bootstrap 249 个空 block，现在一行说完）；② 未解析 token 只报「像颜色」的（名字含 color/bg/fg/border/contrast…，或值本身能解析成颜色；shadow/gradient/font/spacing 一律排除）——832 → 47，剩下的 47 条看一眼源码确实是真读不了：`color-mix(in srgb, var(--bs-table-color) var(--bs-table-striped-bg-factor), transparent)`，百分比是变量还混了 transparent，报「未检查」才是诚实的；③ 最关键的，`--all-blocks` 之前对每个 block **独立解析 var()**，而 utility block 的 `var(--brand)` 指向 `:root` 里的声明——所以全被判成读不了。改成「解析用全表合并的 token，派生配对只用本 block」，这才是 CSS 层叠的实际语义。47 条里剩下的都是真·无解，不是工具蠢。
+  顺带修掉选择器污染：`@charset "UTF-8"; :root` 这种把 at-rule 语句当成选择器一部分的问题（截到最后一个分号之后），不然 `--block :root` 永远匹配不上。
+  260 行 → 20 行，3 条真失败仍然在。115 测试通过（+5）。
