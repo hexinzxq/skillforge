@@ -104,3 +104,6 @@
 - **21:40 viewport-vh 只认字面量，`calc(100vh - …)` 全漏** — 收口窗口补做（今天 0 次迭代，旧会话损坏导致白天四个窗口都没跑成）。先拿真实语料测：`/Users/xin/Documents/Codex/2026-05-03/new-chat/src/app/globals.css` 有 5 处 100vh，其中 3 处是裸的、1 处 `min-height: 100vh`、还有 1 处是 **`max-height: calc(100vh - 100px)`**。旧规则 `\b(?:min-)?height\s*:\s*100vh\b` 一条都抓不到 calc 里的那种，而带 sticky header 的页面恰恰都这么写——也就是说这条 FAIL 在真实项目上基本是瞎的。
   改法：不再对整条规则体做一次正则，而是先把 `height / min-height / max-height` 这些声明切出来，再看值里有没有 `100vh`（calc/max()/min() 里出现同样算）。顺带把 `max-height` 缺口补上。token 声明（`--hero-height: 100vh`）不报：单位放 token 里、改一次全站生效，是正确的写法。
   验证：真实文件复测 4 条 → 5 条（新增的正是 line 254 那条 calc）；新增 2 个用例（calc 报、token 不报），27 个 sloplint 用例全过（+2）。
+- **21:44 页面少了 viewport，手机上是整页缩小版** — 扫了 31 个真实 HTML，只有一个整页没有 `<meta name="viewport">`：`/Users/xin/Documents/deepseek-harness/default-workspace/resume-md/.build/resume.html`（A4 打印构建，属于可豁免——但它恰好证明这条规则只是地板，豁免写在记录里一行就完事）。而 sloplint 此前对「完整页面没有 viewport」一个字都不会说，这是响应式地板上最大的一个洞：AI 生成的页面常常从 `<body>` 开始写，`<head>` 里除了 `<title>` 什么都没有。
+  实现上有个必须守住的分界：**片段/模板不是页面**，它们不拥有 `<head>`，对它们要求 meta 等于把每个服务端 include 都判失败。所以只在 `< !doctype html` 或 `<html` 出现时才查；`name=viewport` 不带引号也认。
+  验证：31 个真实页面里命中 1 个（上面那个），新增 3 个用例（整页缺 meta 报、无引号 meta 通过、片段不报），30 个 sloplint 用例全过（+3）；两个 fixture 页面补上了 meta 保持「好例就是对的写法」。

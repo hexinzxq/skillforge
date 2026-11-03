@@ -30,6 +30,8 @@ COLOR_LITERAL = re.compile(
     r"(#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab|lab|lch)\([^)]*\))"
 )
 THEME_SELECTOR = re.compile(r":root|\[data-theme", re.I)
+FULL_DOC = re.compile(r"<!doctype\s+html|<html\b", re.I)
+VIEWPORT_META = re.compile(r"<meta\b[^>]*\bname\s*=\s*[\"']?viewport\b", re.I)
 # Animating any of these makes the browser re-layout every frame. Matching is
 # on the whole property name: `border-left-color` paints, it does not reflow,
 # and a substring match on `left` reported it as layout (found on a real blog).
@@ -154,6 +156,15 @@ def check_css(path: Path, line: int, css: str, focus_kind: str) -> list[Finding]
 
 def check_html(path: Path, text: str) -> list[Finding]:
     out: list[Finding] = []
+    # A fragment (a partial, a template) is not a page: only full documents own
+    # the <head>. Without the viewport meta every phone lays the page out at
+    # 980px and shrinks it, which is the single most common "looks fine on my
+    # laptop" report.
+    if FULL_DOC.search(text) and not VIEWPORT_META.search(text):
+        out.append(Finding(str(path), 1, "FAIL", "no-viewport",
+                           "full page has no `<meta name=\"viewport\">` — phones lay it "
+                           "out at 980px and shrink the text; add "
+                           "`width=device-width, initial-scale=1`"))
     for match in IMG_TAG.finditer(text):
         tag = match.group(0)
         if not re.search(r"\balt\s*=", tag, re.I):

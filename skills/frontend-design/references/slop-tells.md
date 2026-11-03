@@ -18,6 +18,7 @@ the skill.
 | `viewport-vh` | `100vh` in a `height`/`min-height`/`max-height` value, including `calc()` | breaks under mobile browser chrome — use `100dvh` (a `--x-height: 100vh` token is fine) |
 | `hidden-overflow` | `overflow-x: hidden` on `html`/`body` | masks a real horizontal overflow instead of fixing it |
 | `img-alt` | `<img>` without `alt` | screen readers announce the filename; `alt=""` only when decorative |
+| `no-viewport` | a full document (`<!doctype`/`<html>`) with no `<meta name="viewport">` | phones lay it out at 980px and shrink it; fragments/partials are exempt |
 | `dangling-var` | `var(--x)` is one or two edits from a token declared in this scan, and has no fallback | it is a typo — the reference resolves to nothing and the element renders with no colour |
 
 ## TELL — the default a model falls into, waivable on the record (exit 0)

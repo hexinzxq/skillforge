@@ -58,6 +58,15 @@ class RuleTests(unittest.TestCase):
         finally:
             Path(path).unlink()
 
+    def scan_html(self, html: str) -> tuple[int, str]:
+        with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False) as handle:
+            handle.write(html)
+            path = handle.name
+        try:
+            return run(path)
+        finally:
+            Path(path).unlink()
+
     def test_transition_all_is_a_failure(self):
         code, out = self.scan_css(".a { transition: all 200ms; }")
         self.assertEqual(code, 1)
@@ -117,6 +126,28 @@ class RuleTests(unittest.TestCase):
     def test_hidden_overflow_on_body_fails_but_on_a_carousel_is_fine(self):
         self.assertEqual(self.scan_css("body { overflow-x: hidden; }")[0], 1)
         self.assertEqual(self.scan_css(".carousel { overflow-x: hidden; }")[0], 0)
+
+    def test_full_page_without_viewport_fails(self):
+        code, out = self.scan_html(
+            '<!doctype html><html lang="en"><head><title>t</title></head>'
+            '<body><p>x</p></body></html>')
+        self.assertEqual(code, 1)
+        self.assertIn("no-viewport", out)
+
+    def test_viewport_meta_without_quotes_still_counts(self):
+        code, out = self.scan_html(
+            '<!doctype html><html lang="en"><head>'
+            '<meta name=viewport content="width=device-width, initial-scale=1">'
+            '</head><body><p>x</p></body></html>')
+        self.assertEqual(code, 0)
+        self.assertNotIn("no-viewport", out)
+
+    def test_fragment_is_not_a_page(self):
+        # Partials and templates do not own <head>; demanding the meta there
+        # would report every server-side include as broken.
+        code, out = self.scan_html('<section class="card"><p>hi</p></section>')
+        self.assertEqual(code, 0)
+        self.assertNotIn("no-viewport", out)
 
     def test_img_without_alt_fails_and_empty_alt_passes(self):
         with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False) as handle:
@@ -219,8 +250,10 @@ class RuleTests(unittest.TestCase):
 
     def test_remote_stylesheets_are_not_fetched(self):
         with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False) as handle:
-            handle.write('<html><head><link rel="stylesheet" '
-                         'href="https://example.com/x.css"></head></html>')
+            handle.write('<html lang="en"><head>'
+                         '<meta name="viewport" content="width=device-width, initial-scale=1">'
+                         '<link rel="stylesheet" href="https://example.com/x.css">'
+                         '</head></html>')
             path = handle.name
         try:
             code, out = run(path)
