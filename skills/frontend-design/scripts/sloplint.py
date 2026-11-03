@@ -41,6 +41,8 @@ LAYOUT_PROP = re.compile(
 TRANSITION_DECL = re.compile(
     r"(?:^|;)\s*(transition|animation)\s*:\s*([^;]+)", re.I
 )
+# The declaration, not just the literal, so `calc(100vh - 4rem)` is covered.
+HEIGHT_DECL = re.compile(r"(?:^|;)\s*((?:min-|max-)?height)\s*:\s*([^;{}]+)", re.I)
 VAR_USE = re.compile(r"var\(\s*--([\w-]+)\s*(,?)")
 VAR_DECL = re.compile(r"--([\w-]+)\s*:")
 
@@ -114,9 +116,15 @@ def check_css(path: Path, line: int, css: str, focus_kind: str) -> list[Finding]
                                    "`outline: none` replaced on `:focus` only — works, but "
                                    "mouse clicks flash the ring too; prefer `:focus-visible`"))
 
-        if re.search(r"\b(?:min-)?height\s*:\s*100vh\b", body, re.I):
-            out.append(Finding(str(path), body_line, "FAIL", "viewport-vh",
-                               "`100vh` breaks under mobile browser chrome — use `100dvh`"))
+        # Real pages rarely write a bare `height: 100vh`; they write
+        # `min-height: calc(100vh - 4rem)` so a sticky header fits. Matching the
+        # whole value keeps the same bug visible in the form people actually use.
+        for decl in HEIGHT_DECL.finditer(body):
+            if re.search(r"\b100vh\b", decl.group(2), re.I):
+                out.append(Finding(str(path), _line_at(css, rule.start(2) + decl.start(), line),
+                                   "FAIL", "viewport-vh",
+                                   "`100vh` (including inside calc()) breaks under mobile "
+                                   "browser chrome — use `100dvh`"))
 
         if re.search(r"\boverflow-x\s*:\s*hidden\b", body, re.I) and re.search(
             r"^(?:html|body)\b|,\s*(?:html|body)\b", selector, re.I):

@@ -15,7 +15,7 @@ the skill.
 | `transition-all` | `transition: all` | also animates layout on resize; name the properties |
 | `animate-geometry` | transition/animation of a layout property (width/height/inset/margin/padding/font-size/line-height/border-width) | layout thrash — animate `transform`/`opacity`; paint properties like `border-left-color` are fine |
 | `no-focus-replacement` | `outline: none` with no `:focus`/`:focus-visible` rule anywhere | the keyboard loses the cursor |
-| `viewport-vh` | `height`/`min-height: 100vh` | breaks under mobile browser chrome — use `100dvh` |
+| `viewport-vh` | `100vh` in a `height`/`min-height`/`max-height` value, including `calc()` | breaks under mobile browser chrome — use `100dvh` (a `--x-height: 100vh` token is fine) |
 | `hidden-overflow` | `overflow-x: hidden` on `html`/`body` | masks a real horizontal overflow instead of fixing it |
 | `img-alt` | `<img>` without `alt` | screen readers announce the filename; `alt=""` only when decorative |
 | `dangling-var` | `var(--x)` is one or two edits from a token declared in this scan, and has no fallback | it is a typo — the reference resolves to nothing and the element renders with no colour |

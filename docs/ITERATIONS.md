@@ -98,3 +98,9 @@
   `--remove` 顺带静音：原来会打印 60 行「skip X: not installed」，卸载只该说真卸掉了什么。
   自测时事故：跑 `./install.sh` 验证默认行为时忘了 `--target`，真的把 frontend-design 软链进了 `~/.claude/skills`（并创建了 `~/.claude`）。已删掉链接和空目录恢复原状。教训：测安装脚本一律带 `--target /tmp/...`，这一次记住了。
   CI 加一步「vendor 路径」：`--list` 必须同时出现自己的和 vendor 的、`--vendor --only common-accessibility` 装完是 1 个软链且指向嵌套目录——一层 glob 的写法会在这步直接失败。
+
+## 2026-11-03
+
+- **21:40 viewport-vh 只认字面量，`calc(100vh - …)` 全漏** — 收口窗口补做（今天 0 次迭代，旧会话损坏导致白天四个窗口都没跑成）。先拿真实语料测：`/Users/xin/Documents/Codex/2026-05-03/new-chat/src/app/globals.css` 有 5 处 100vh，其中 3 处是裸的、1 处 `min-height: 100vh`、还有 1 处是 **`max-height: calc(100vh - 100px)`**。旧规则 `\b(?:min-)?height\s*:\s*100vh\b` 一条都抓不到 calc 里的那种，而带 sticky header 的页面恰恰都这么写——也就是说这条 FAIL 在真实项目上基本是瞎的。
+  改法：不再对整条规则体做一次正则，而是先把 `height / min-height / max-height` 这些声明切出来，再看值里有没有 `100vh`（calc/max()/min() 里出现同样算）。顺带把 `max-height` 缺口补上。token 声明（`--hero-height: 100vh`）不报：单位放 token 里、改一次全站生效，是正确的写法。
+  验证：真实文件复测 4 条 → 5 条（新增的正是 line 254 那条 calc）；新增 2 个用例（calc 报、token 不报），27 个 sloplint 用例全过（+2）。

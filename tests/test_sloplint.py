@@ -99,6 +99,21 @@ class RuleTests(unittest.TestCase):
         self.assertIn("viewport-vh", out)
         self.assertEqual(self.scan_css("body { min-height: 100dvh; }")[0], 0)
 
+    def test_100vh_inside_calc_is_still_the_mobile_bug(self):
+        # Real pages write `min-height: calc(100vh - 4rem)` to fit a sticky
+        # header; the bare-literal match missed every one of them.
+        code, out = self.scan_css(".hero { min-height: calc(100vh - 4rem); }")
+        self.assertEqual(code, 1)
+        self.assertIn("viewport-vh", out)
+
+    def test_a_height_token_may_hold_100vh(self):
+        # The token is the right place for a raw viewport unit: changing the
+        # token once beats hunting every height declaration.
+        code, out = self.scan_css(
+            ":root { --hero-height: 100vh; } .x { height: var(--hero-height); }")
+        self.assertEqual(code, 0)
+        self.assertNotIn("viewport-vh", out)
+
     def test_hidden_overflow_on_body_fails_but_on_a_carousel_is_fine(self):
         self.assertEqual(self.scan_css("body { overflow-x: hidden; }")[0], 1)
         self.assertEqual(self.scan_css(".carousel { overflow-x: hidden; }")[0], 0)
