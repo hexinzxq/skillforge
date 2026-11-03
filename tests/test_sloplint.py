@@ -223,6 +223,20 @@ class RuleTests(unittest.TestCase):
         finally:
             Path(path).unlink()
 
+    def test_strict_quiet_still_shows_what_failed(self):
+        # --quiet hides tells because they pass; under --strict they fail, and a
+        # run that exits 1 while printing no finding is a linter bug.
+        with tempfile.NamedTemporaryFile("w", suffix=".css", delete=False) as handle:
+            handle.write(".card { background: #ffffff; }")
+            path = handle.name
+        try:
+            code, out = run(path, "--strict", "--quiet")
+            self.assertEqual(code, 1)
+            self.assertIn("literal-color", out)
+            self.assertIn("promoted by --strict", out)
+        finally:
+            Path(path).unlink()
+
     def test_quiet_hides_tells(self):
         with tempfile.NamedTemporaryFile("w", suffix=".css", delete=False) as handle:
             handle.write(".card { background: #ffffff; }")

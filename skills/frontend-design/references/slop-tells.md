@@ -31,7 +31,8 @@ the skill.
 | `focus-not-visible` | `outline: none` replaced on `:focus` only | works, but every mouse click flashes the ring — `:focus-visible` shows it only for keyboard use |
 
 `--strict` makes TELLs fail too — use it on a project that has already
-committed to a token layer, where a literal colour is a real defect.
+committed to a token layer, where a literal colour is a real defect. It also
+overrides `--quiet` for tells: a run that exits 1 must print why.
 
 ## Waiving a tell
 

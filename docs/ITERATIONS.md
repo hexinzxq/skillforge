@@ -114,3 +114,6 @@
   改法：把判断提到 main()，所有入参文件（含沿着 `<link>` 找到的）先读进来合成一份 CSS 再算 `focus_kind`，`scan()` 只负责用这个全局结论判每一条 `outline: none`。单独扫 reset 时仍然 FAIL（那时它确实没有替代焦点），这才是正确语义。
   顺带的结构收益：每个文件只读一次，之前 scan() 读一遍、后面统计 var() 又读一遍。
   验证：新增 1 个用例（两文件分拆 → 通过；单独 reset → 失败），122 个测试全过（sloplint 34 个）。
+- **22:03 `--strict --quiet` 退出 1 却不打印任何发现** — 收口最后一条，最小但最丢人：`--quiet` 的本意是「TELL 不影响结果所以别刷屏」，可 `--strict` 下 TELL 就是失败。两个都对，合在一起就是「退出码 1、屏幕空白、摘要说 0 failure」，读起来像 linter 自己坏了。
+  改法：`--quiet` 只压 `not strict` 的 TELL；strict 下的摘要多一句「(+N tell(s) promoted by --strict)」，让 0 failure 的摘要和退出码 1 不再自相矛盾。
+  验证：新增 1 个用例（strict+quiet 必须打印 literal-color 且带 promoted 字样），123 个测试全过；`--quiet` 单独用仍然隐藏，行为没变。

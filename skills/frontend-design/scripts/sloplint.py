@@ -329,15 +329,19 @@ def main(argv: list[str] | None = None) -> int:
                 f"`var(--{name})` is not declared and is one edit from "
                 f"`--{near}` — probably a typo; that reference resolves to nothing"))
 
+    fails = [f for f in findings if f.severity == "FAIL"]
+    tells = [f for f in findings if f.severity == "TELL"]
+    # --quiet hides tells because they do not fail the run — except under
+    # --strict, where every tell is a failure. Hiding those printed nothing and
+    # still exited 1, which reads as a linter bug rather than a finding.
     for finding in findings:
-        if args.quiet and finding.severity == "TELL":
+        if args.quiet and finding.severity == "TELL" and not args.strict:
             continue
         print(finding.render())
 
-    fails = [f for f in findings if f.severity == "FAIL"]
-    tells = [f for f in findings if f.severity == "TELL"]
     if fails or (tells and args.strict):
-        print(f"\n{len(fails)} failure(s), {len(tells)} tell(s) — fix failures; "
+        promoted = f" (+{len(tells)} tell(s) promoted by --strict)" if args.strict and tells else ""
+        print(f"\n{len(fails)} failure(s){promoted}, {len(tells)} tell(s) — fix failures; "
               f"waive tells on the record ({len(seen_paths)} file(s) scanned).",
               file=sys.stderr)
         return 1
