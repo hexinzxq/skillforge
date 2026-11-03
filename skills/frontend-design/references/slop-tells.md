@@ -19,6 +19,7 @@ the skill.
 | `hidden-overflow` | `overflow-x: hidden` on `html`/`body` | masks a real horizontal overflow instead of fixing it |
 | `img-alt` | `<img>` without `alt` | screen readers announce the filename; `alt=""` only when decorative |
 | `no-viewport` | a full document (`<!doctype`/`<html>`) with no `<meta name="viewport">` | phones lay it out at 980px and shrink it; fragments/partials are exempt |
+| `zoom-lock` | viewport with `user-scalable=no` or `maximum-scale` below 5 | pinch-zoom is an accessibility feature (WCAG 1.4.4); low-vision users cannot read a page that forbids it |
 | `dangling-var` | `var(--x)` is one or two edits from a token declared in this scan, and has no fallback | it is a typo — the reference resolves to nothing and the element renders with no colour |
 
 ## TELL — the default a model falls into, waivable on the record (exit 0)

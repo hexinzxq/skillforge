@@ -107,3 +107,6 @@
 - **21:44 页面少了 viewport，手机上是整页缩小版** — 扫了 31 个真实 HTML，只有一个整页没有 `<meta name="viewport">`：`/Users/xin/Documents/deepseek-harness/default-workspace/resume-md/.build/resume.html`（A4 打印构建，属于可豁免——但它恰好证明这条规则只是地板，豁免写在记录里一行就完事）。而 sloplint 此前对「完整页面没有 viewport」一个字都不会说，这是响应式地板上最大的一个洞：AI 生成的页面常常从 `<body>` 开始写，`<head>` 里除了 `<title>` 什么都没有。
   实现上有个必须守住的分界：**片段/模板不是页面**，它们不拥有 `<head>`，对它们要求 meta 等于把每个服务端 include 都判失败。所以只在 `< !doctype html` 或 `<html` 出现时才查；`name=viewport` 不带引号也认。
   验证：31 个真实页面里命中 1 个（上面那个），新增 3 个用例（整页缺 meta 报、无引号 meta 通过、片段不报），30 个 sloplint 用例全过（+3）；两个 fixture 页面补上了 meta 保持「好例就是对的写法」。
+- **21:50 把「禁止缩放」写进 viewport 的页面，低视力用户直接读不了** — 本机 31 个真实页面没有命中（本地语料里都是 `width=device-width, initial-scale=1` 这种正常写法），所以这条按标准立：WCAG 1.4.4 要求页面不损失内容地放大到 200%，而 `user-scalable=no` / `maximum-scale=1` 正是 iOS 上按住这个开关的写法（Android Chrome 会忽略 user-scalable，但 iOS 不会）。生成式页面经常顺手带上这两个参数来「防止布局缩放坏掉」——那是拿可访问性换自己的方便。
+  分级取 FAIL 而不是 TELL：这不是口味问题，是有人真的读不了。阈值取 5（iOS 的默认上限），写 `maximum-scale=5` 等于没写，不算违规。
+  验证：新增 2 个用例（两种写法都报，`maximum-scale=5` 不报），32 个 sloplint 用例全过。没拿真实文件做证据，这一点写清楚，好过假装有。

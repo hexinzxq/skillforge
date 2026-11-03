@@ -142,6 +142,26 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertNotIn("no-viewport", out)
 
+    def test_zoom_may_not_be_switched_off(self):
+        for meta in ('width=device-width, user-scalable=no',
+                     'width=device-width, maximum-scale=1'):
+            code, out = self.scan_html(
+                '<!doctype html><html lang="en"><head>'
+                f'<meta name="viewport" content="{meta}">'
+                '</head><body><p>x</p></body></html>')
+            self.assertEqual(code, 1, meta)
+            self.assertIn("zoom-lock", out)
+
+    def test_a_generous_maximum_scale_is_fine(self):
+        # iOS honours maximum-scale; 5 is the default ceiling, so writing it
+        # changes nothing for the user.
+        code, out = self.scan_html(
+            '<!doctype html><html lang="en"><head>'
+            '<meta name="viewport" content="width=device-width, maximum-scale=5">'
+            '</head><body><p>x</p></body></html>')
+        self.assertEqual(code, 0)
+        self.assertNotIn("zoom-lock", out)
+
     def test_fragment_is_not_a_page(self):
         # Partials and templates do not own <head>; demanding the meta there
         # would report every server-side include as broken.

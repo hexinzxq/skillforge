@@ -32,6 +32,10 @@ COLOR_LITERAL = re.compile(
 THEME_SELECTOR = re.compile(r":root|\[data-theme", re.I)
 FULL_DOC = re.compile(r"<!doctype\s+html|<html\b", re.I)
 VIEWPORT_META = re.compile(r"<meta\b[^>]*\bname\s*=\s*[\"']?viewport\b", re.I)
+VIEWPORT_TAG = re.compile(r"<meta\b[^>]*\bname\s*=\s*[\"']?viewport\b[^>]*>", re.I)
+CONTENT_ATTR = re.compile(r"\bcontent\s*=\s*([\"'])(.*?)\1", re.S | re.I)
+MAX_SCALE = re.compile(r"maximum-scale\s*=\s*[\"']?\s*([0-9.]+)", re.I)
+USER_SCALABLE = re.compile(r"user-scalable\s*=\s*[\"']?\s*(?:no|0)\b", re.I)
 # Animating any of these makes the browser re-layout every frame. Matching is
 # on the whole property name: `border-left-color` paints, it does not reflow,
 # and a substring match on `left` reported it as layout (found on a real blog).
@@ -165,6 +169,22 @@ def check_html(path: Path, text: str) -> list[Finding]:
                            "full page has no `<meta name=\"viewport\">` — phones lay it "
                            "out at 980px and shrink the text; add "
                            "`width=device-width, initial-scale=1`"))
+    # Zoom is an accessibility feature, not a design knob: WCAG 1.4.4 wants the
+    # page to reach 200% without loss. `user-scalable=no` and a low
+    # maximum-scale take that away from low-vision users.
+    for tag in VIEWPORT_TAG.finditer(text):
+        content = CONTENT_ATTR.search(tag.group(0))
+        if not content:
+            continue
+        declaration = content.group(2)
+        blocked = USER_SCALABLE.search(declaration) is not None
+        limit = MAX_SCALE.search(declaration)
+        if limit and float(limit.group(1)) < 5:
+            blocked = True
+        if blocked:
+            out.append(Finding(str(path), _line_at(text, tag.start(), 1), "FAIL", "zoom-lock",
+                               "viewport disables pinch-zoom (`user-scalable=no` or a low "
+                               "`maximum-scale`) — WCAG 1.4.4 needs 200%; drop it"))
     for match in IMG_TAG.finditer(text):
         tag = match.group(0)
         if not re.search(r"\balt\s*=", tag, re.I):
