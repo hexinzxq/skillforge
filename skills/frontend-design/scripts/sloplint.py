@@ -248,19 +248,28 @@ def _strip_comments(css: str) -> str:
     return COMMENT_RE.sub(lambda m: "\n" * m.group(0).count("\n"), css)
 
 
-def scan(path: Path) -> list[Finding]:
-    text = path.read_text(encoding="utf-8")
+def focus_scope(texts: list[tuple[Path, str]]) -> str:
+    """Whether the keyboard keeps a cursor anywhere in this scan.
+
+    The rule's message says "anywhere", and real projects split it: a reset sets
+    `outline: none` while a focus sheet adds `:focus-visible`. Judging each file
+    alone reported the reset as a failure even though the scan's own focus sheet
+    replaced the ring.
+    """
+    joined = []
+    for path, text in texts:
+        for _line, region in _regions(path, text):
+            joined.append(_strip_comments(region))
+    whole = "\n".join(joined)
+    if ":focus-visible" in whole:
+        return "visible"
+    return "focus" if ":focus" in whole else "none"
+
+
+def scan(path: Path, text: str, focus_kind: str) -> list[Finding]:
     findings = check_html(path, text) if path.suffix.lower() in (".html", ".htm") else []
-    regions = [(_line, _strip_comments(region)) for _line, region in _regions(path, text)]
-    joined = "\n".join(region for _line, region in regions)
-    if ":focus-visible" in joined:
-        focus_kind = "visible"
-    elif ":focus" in joined:
-        focus_kind = "focus"
-    else:
-        focus_kind = "none"
-    for line, css in regions:
-        findings += check_css(path, line, css, focus_kind)
+    for line, raw_css in _regions(path, text):
+        findings += check_css(path, line, _strip_comments(raw_css), focus_kind)
     return findings
 
 
@@ -288,13 +297,16 @@ def main(argv: list[str] | None = None) -> int:
         queue.append(path)
         queue.extend(linked_stylesheets(path))
     seen_paths: set[Path] = set()
+    texts: list[tuple[Path, str]] = []
     for path in queue:
         if path.resolve() in seen_paths:
             continue
         seen_paths.add(path.resolve())
-        findings += scan(path)
-        text = path.read_text(encoding="utf-8")
+        texts.append((path, path.read_text(encoding="utf-8")))
+    focus_kind = focus_scope(texts)
+    for path, text in texts:
         sources.append((path, text))
+        findings += scan(path, text, focus_kind)
         for line, raw_css in _regions(path, text):
             css = _strip_comments(raw_css)
             declared.update(VAR_DECL.findall(css))

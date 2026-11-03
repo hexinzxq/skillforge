@@ -110,3 +110,7 @@
 - **21:50 把「禁止缩放」写进 viewport 的页面，低视力用户直接读不了** — 本机 31 个真实页面没有命中（本地语料里都是 `width=device-width, initial-scale=1` 这种正常写法），所以这条按标准立：WCAG 1.4.4 要求页面不损失内容地放大到 200%，而 `user-scalable=no` / `maximum-scale=1` 正是 iOS 上按住这个开关的写法（Android Chrome 会忽略 user-scalable，但 iOS 不会）。生成式页面经常顺手带上这两个参数来「防止布局缩放坏掉」——那是拿可访问性换自己的方便。
   分级取 FAIL 而不是 TELL：这不是口味问题，是有人真的读不了。阈值取 5（iOS 的默认上限），写 `maximum-scale=5` 等于没写，不算违规。
   验证：新增 2 个用例（两种写法都报，`maximum-scale=5` 不报），32 个 sloplint 用例全过。没拿真实文件做证据，这一点写清楚，好过假装有。
+- **21:58 `no-focus-replacement` 的措辞和实现不一致：说「anywhere」，实际只看单个文件** — 拿两个真实风格的拆分复现：`reset.css` 写 `* { outline: none }`，`focus.css` 写 `:focus-visible { outline: 2px solid }`。两个一起扫，reset 照样 FAIL——可页面上明明有焦点了。原因：`scan()` 里每个文件各自算 `focus_kind`，于是「本文件没写 :focus-visible」被当成「整个项目没写」。
+  改法：把判断提到 main()，所有入参文件（含沿着 `<link>` 找到的）先读进来合成一份 CSS 再算 `focus_kind`，`scan()` 只负责用这个全局结论判每一条 `outline: none`。单独扫 reset 时仍然 FAIL（那时它确实没有替代焦点），这才是正确语义。
+  顺带的结构收益：每个文件只读一次，之前 scan() 读一遍、后面统计 var() 又读一遍。
+  验证：新增 1 个用例（两文件分拆 → 通过；单独 reset → 失败），122 个测试全过（sloplint 34 个）。

@@ -102,6 +102,20 @@ class RuleTests(unittest.TestCase):
         code, _ = self.scan_css(".a { outline: none; } .a:focus-visible { outline: 2px solid red; }")
         self.assertEqual(code, 0)
 
+    def test_focus_sheet_in_a_separate_file_counts(self):
+        # Real projects split reset.css (`outline: none`) from focus.css
+        # (`:focus-visible`). The rule's message says "anywhere", so the whole
+        # argument set is the scope — judging each file alone failed the reset.
+        with tempfile.TemporaryDirectory() as tmp:
+            reset = Path(tmp) / "reset.css"
+            reset.write_text("* { outline: none; }\n")
+            focus = Path(tmp) / "focus.css"
+            focus.write_text(":focus-visible { outline: 2px solid red; }\n")
+            code, out = run(str(reset), str(focus))
+            self.assertEqual(code, 0, out)
+            # Alone, the reset really does leave the keyboard nowhere to be.
+            self.assertEqual(run(str(reset))[0], 1)
+
     def test_100vh_fails_and_100dvh_passes(self):
         code, out = self.scan_css("body { min-height: 100vh; }")
         self.assertEqual(code, 1)
