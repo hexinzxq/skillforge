@@ -123,3 +123,6 @@
 - **12:41 指向不存在文件的相对 `<link>` 只被当成「跳过的」** — 早上那条 note 把三种原因写在一行里：远程、根相对、文件不存在。前两种确实没法从磁盘解析，第三种不一样——`href="assets/styles.css"` 而文件被改名/拼错时，页面就是裸着上线的，而 sloplint 只打一行 note、退出 0。实测：造一个 `assets/styles.css` 不存在的页面，原来 `exit 0` + note。
   改法：`linked_stylesheets()` 返回 (可读, [(行号, href, 原因)])，原因分 remote / root-relative / missing；missing 变成 FAIL `missing-stylesheet`（带行号），其余两种仍进 note。
   验证：新增 1 个用例（缺文件的相对 href → exit 1、输出 missing-stylesheet 与路径），127 个测试全过；根相对和 CDN 的两个老用例仍是 exit 0 + note，没被误伤。
+- **13:37 带 `<base href>` 的页面被自己早上那条 missing 规则误伤** — 上午刚把「相对 href 找不到文件」升成 FAIL，今天下午就撞到它的反例：`<base href="/wiki/">` 的文档里，`href="style.css"` 是按 base 解析到服务器的，本地目录里当然没有。按新规则这种完全正确的页面会 exit 1。
+  改法：检测 `<base href>`（BASE_TAG），有 base 时相对链接一律归入「无法解析」的 note（原因标 base-href），不再当 missing。note 文案同步补上 base-relative 这个词。
+  验证：新增 1 个用例（base + 相对 href → exit 0 且出现 note），128 个测试全过；没有 base 的页面里缺文件仍然 FAIL（老用例没动）。

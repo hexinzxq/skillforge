@@ -24,6 +24,7 @@ STYLE_BLOCK = re.compile(r"<style[^>]*>(.*?)</style>", re.S | re.I)
 STYLE_ATTR = re.compile(r'\sstyle="([^"]*)"', re.I)
 IMG_TAG = re.compile(r"<img\b[^>]*>", re.I)
 LINK_TAG = re.compile(r"<link\b[^>]*>", re.I)
+BASE_TAG = re.compile(r"<base\b[^>]*\bhref\s*=", re.I)
 HREF_ATTR = re.compile(r'\bhref\s*=\s*["\']([^"\']+)["\']', re.I)
 CSS_RULE = re.compile(r"([^{}]+)\{([^{}]*)\}", re.S)
 COLOR_LITERAL = re.compile(
@@ -229,6 +230,11 @@ def linked_stylesheets(path: Path) -> tuple[list[Path], list[tuple[int, str, str
     if path.suffix.lower() not in (".html", ".htm"):
         return [], []
     text = path.read_text(encoding="utf-8")
+    # A document with <base href> resolves every relative URL against it, not
+    # against its own directory — `/wiki/` plus `style.css` is a valid page that
+    # loads nothing from this folder. Judging those files "missing" failed
+    # correct pages.
+    has_base = bool(BASE_TAG.search(text))
     found: list[Path] = []
     unresolved: list[tuple[int, str, str]] = []
     for tag in LINK_TAG.finditer(text):
@@ -244,6 +250,9 @@ def linked_stylesheets(path: Path) -> tuple[list[Path], list[tuple[int, str, str
             continue
         if href.startswith("/"):
             unresolved.append((line, href, "root-relative"))
+            continue
+        if has_base:
+            unresolved.append((line, href, "base-href"))
             continue
         candidate = (path.parent / href.split("?")[0]).resolve()
         if candidate.is_file():
@@ -368,7 +377,7 @@ def main(argv: list[str] | None = None) -> int:
         if len(skipped_stylesheets) > 4:
             shown += f", … (+{len(skipped_stylesheets) - 4} more)"
         print(f"\nnote: {len(skipped_stylesheets)} linked stylesheet(s) not scanned "
-              f"(remote, root-relative, or missing): {shown}", file=sys.stderr)
+              f"(remote, root-relative, base-relative, or missing): {shown}", file=sys.stderr)
 
     if fails or (tells and args.strict):
         promoted = f" (+{len(tells)} tell(s) promoted by --strict)" if args.strict and tells else ""

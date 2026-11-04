@@ -36,8 +36,9 @@ committed to a token layer, where a literal colour is a real defect. It also
 overrides `--quiet` for tells: a run that exits 1 must print why.
 
 Coverage: a page that links a stylesheet sloplint cannot open from disk — a
-root-relative `/_next/static/css/...` href or a CDN sheet — gets a `note:` line
-naming it. A relative href whose file is missing is not a note: it is the
+root-relative `/_next/static/css/...` href, a CDN sheet, or a relative href on
+a page with `<base href>` — gets a `note:` line naming it. A relative href whose
+file is missing (and that no `<base>` redirects) is not a note: it is the
 `missing-stylesheet` failure above. Zero findings then means "nothing wrong
 in the files I could read", not "the page is fine". Read the skipped sheet
 yourself against the tables above.

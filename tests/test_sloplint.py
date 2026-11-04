@@ -52,7 +52,23 @@ class FixtureTests(unittest.TestCase):
             self.assertIn("not scanned", out)
             self.assertIn("/_next/static/css/app.css", out)
 
-    def test_missing_local_stylesheet_fails(self):
+    def test_base_href_makes_relative_links_unresolvable_not_missing(self):
+        # With <base href="/wiki/"> a relative href resolves against the server,
+        # not this folder; calling it missing failed a correct page.
+        html = (
+            '<!doctype html><html><head><base href="/wiki/">'
+            '<meta name="viewport" content="width=device-width, initial-scale=1">'
+            '<link rel="stylesheet" href="style.css">'
+            '</head><body><p>hi</p></body></html>'
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            page = Path(tmp) / "index.html"
+            page.write_text(html)
+            code, out = run(str(page))
+            self.assertEqual(code, 0, out)
+            self.assertIn("not scanned", out)
+
+
         # A relative href that does not resolve is not "unscanned" like a CDN
         # sheet — the page ships unstyled. Renames and typos land here.
         html = (
