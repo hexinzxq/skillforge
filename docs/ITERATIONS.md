@@ -117,3 +117,6 @@
 - **22:03 `--strict --quiet` 退出 1 却不打印任何发现** — 收口最后一条，最小但最丢人：`--quiet` 的本意是「TELL 不影响结果所以别刷屏」，可 `--strict` 下 TELL 就是失败。两个都对，合在一起就是「退出码 1、屏幕空白、摘要说 0 failure」，读起来像 linter 自己坏了。
   改法：`--quiet` 只压 `not strict` 的 TELL；strict 下的摘要多一句「(+N tell(s) promoted by --strict)」，让 0 failure 的摘要和退出码 1 不再自相矛盾。
   验证：新增 1 个用例（strict+quiet 必须打印 literal-color 且带 promoted 字样），123 个测试全过；`--quiet` 单独用仍然隐藏，行为没变。
+- **08:07 根相对的 `<link>` 被静默跳过，摘要却写「clean」** — 拿 `next export` 出来的真页面（/Users/xin/Documents/Codex/2026-05-03/new-chat/out/index.html）试：它整站样式都在 `/_next/static/css/faf81e09ecf69405.css`，sloplint 输出 `clean: 0 tell(s) wairable, 0 failures (1 file(s) scanned)`——一句都没提那份 CSS 没被打开。这正是这轮反复撞到的病：工具不说清自己查了什么，就把「没查」卖成「没问题」。
+  改法：`linked_stylesheets()` 改成返回 (可读的, 跳过的)；跳过 = 远程 / 根相对 → 无法从磁盘解析 / 文件不存在。main() 汇总后在摘要前打一行 `note: N linked stylesheet(s) not scanned (remote, root-relative, or missing): …`，最多列 4 条加省略。
+  验证：新增 2 个用例（`/_next/…` 与 CDN 的 href 必须出现在 note 里，且原文的 href 不丢），126 个测试全过；本地可读的 <link> 仍然照常跟进扫描，老行为不变。

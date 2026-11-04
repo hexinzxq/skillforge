@@ -34,6 +34,12 @@ the skill.
 committed to a token layer, where a literal colour is a real defect. It also
 overrides `--quiet` for tells: a run that exits 1 must print why.
 
+Coverage: a page that links a stylesheet sloplint cannot open from disk — a
+root-relative `/_next/static/css/...` href, a CDN sheet, or a file that isn't
+there — gets a `note:` line naming it. Zero findings then means "nothing wrong
+in the files I could read", not "the page is fine". Read the skipped sheet
+yourself against the tables above.
+
 ## Waiving a tell
 
 Fix it, or waive it **on the record**: one line in the handoff saying which

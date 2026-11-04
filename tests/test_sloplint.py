@@ -34,6 +34,38 @@ def run(*argv: str) -> tuple[int, str]:
 
 
 class FixtureTests(unittest.TestCase):
+    def test_unreachable_stylesheet_is_named_not_dropped(self):
+        # Next/Vite exports link `/_next/static/css/x.css`; resolving that from
+        # disk is impossible, but reporting "0 failures" while the whole design
+        # was never opened is worse than saying what was skipped.
+        html = (
+            '<!doctype html><html><head>'
+            '<meta name="viewport" content="width=device-width, initial-scale=1">'
+            '<link rel="stylesheet" href="/_next/static/css/app.css">'
+            '</head><body><p>hi</p></body></html>'
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            page = Path(tmp) / "index.html"
+            page.write_text(html)
+            code, out = run(str(page))
+            self.assertEqual(code, 0, out)
+            self.assertIn("not scanned", out)
+            self.assertIn("/_next/static/css/app.css", out)
+
+    def test_remote_stylesheet_is_named_too(self):
+        html = (
+            '<!doctype html><html><head>'
+            '<meta name="viewport" content="width=device-width, initial-scale=1">'
+            '<link rel="stylesheet" href="https://cdn.example.com/site.css">'
+            '</head><body><p>hi</p></body></html>'
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            page = Path(tmp) / "index.html"
+            page.write_text(html)
+            code, out = run(str(page))
+            self.assertEqual(code, 0, out)
+            self.assertIn("https://cdn.example.com/site.css", out)
+
     def test_clean_page_passes(self):
         code, out = run(str(FIXTURES / "slop-good.html"))
         self.assertEqual(code, 0)

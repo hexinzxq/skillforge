@@ -217,13 +217,20 @@ def _edit_distance(a: str, b: str) -> int:
     return previous[-1]
 
 
-def linked_stylesheets(path: Path) -> list[Path]:
-    """Local stylesheets an HTML page pulls in. Linting a page but not its CSS
-    reports nothing on sites whose whole design lives in a <link>."""
+def linked_stylesheets(path: Path) -> tuple[list[Path], list[str]]:
+    """Local stylesheets an HTML page pulls in, plus the ones we cannot reach.
+
+    Linting a page but not its CSS reports nothing on sites whose whole design
+    lives in a <link>. The second half matters as much: a root-relative href
+    (`/_next/static/css/x.css`) or a CDN sheet cannot be resolved from disk, and
+    dropping it silently made a page whose entire design lived there read as
+    "clean: 0 failures". The caller says out loud what it skipped instead.
+    """
     if path.suffix.lower() not in (".html", ".htm"):
-        return []
+        return [], []
     text = path.read_text(encoding="utf-8")
     found: list[Path] = []
+    skipped: list[str] = []
     for tag in LINK_TAG.finditer(text):
         if "stylesheet" not in tag.group(0).lower():
             continue
@@ -231,12 +238,16 @@ def linked_stylesheets(path: Path) -> list[Path]:
         if not match:
             continue
         href = match.group(1)
-        if href.startswith(("http://", "https://", "//", "data:")):
+        if href.startswith(("http://", "https://", "//", "data:")) or href.startswith("/"):
+            skipped.append(href)
             continue
         candidate = (path.parent / href.split("?")[0]).resolve()
-        if candidate.is_file() and candidate not in found:
-            found.append(candidate)
-    return found
+        if candidate.is_file():
+            if candidate not in found:
+                found.append(candidate)
+        elif href not in skipped:
+            skipped.append(href)
+    return found, skipped
 
 
 COMMENT_RE = re.compile(r"/\*.*?\*/", re.S)
@@ -289,13 +300,16 @@ def main(argv: list[str] | None = None) -> int:
     uses: list[tuple[Path, int, str, bool]] = []
     sources: list[tuple[Path, str]] = []
     queue: list[Path] = []
+    skipped_stylesheets: list[str] = []
     for raw in args.paths:
         path = Path(raw).expanduser()
         if not path.is_file():
             print(f"error: no such file: {raw}", file=sys.stderr)
             return 2
         queue.append(path)
-        queue.extend(linked_stylesheets(path))
+        found, skipped = linked_stylesheets(path)
+        queue.extend(found)
+        skipped_stylesheets.extend(href for href in skipped if href not in skipped_stylesheets)
     seen_paths: set[Path] = set()
     texts: list[tuple[Path, str]] = []
     for path in queue:
@@ -338,6 +352,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.quiet and finding.severity == "TELL" and not args.strict:
             continue
         print(finding.render())
+
+    if skipped_stylesheets:
+        shown = ", ".join(skipped_stylesheets[:4])
+        if len(skipped_stylesheets) > 4:
+            shown += f", … (+{len(skipped_stylesheets) - 4} more)"
+        print(f"\nnote: {len(skipped_stylesheets)} linked stylesheet(s) not scanned "
+              f"(remote, root-relative, or missing): {shown}", file=sys.stderr)
 
     if fails or (tells and args.strict):
         promoted = f" (+{len(tells)} tell(s) promoted by --strict)" if args.strict and tells else ""
