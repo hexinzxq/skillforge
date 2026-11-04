@@ -697,6 +697,19 @@ def main(argv: list[str]) -> int:
         print(f"note: {len(skipped_rows)} token(s) not checked (unresolvable value): "
               f"{shown}{more}", file=sys.stderr)
 
+    # `--css tokens.css --css brand.css` is normal: a palette is often split
+    # across files, and both halves redeclare "text"/"bg" so the subpage works
+    # standalone. Printing the identical pair twice made a 4-row check look like
+    # a 7-row one; keep the first occurrence.
+    seen_rows: set[tuple[str, tuple[int, int, int], tuple[int, int, int], float]] = set()
+    unique_rows = []
+    for row in rows:
+        if row in seen_rows:
+            continue
+        seen_rows.add(row)
+        unique_rows.append(row)
+    rows = unique_rows
+
     out, failures = render(rows)
     print(out)
     if not args.quiet:

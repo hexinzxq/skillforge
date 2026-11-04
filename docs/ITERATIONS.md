@@ -126,3 +126,6 @@
 - **13:37 带 `<base href>` 的页面被自己早上那条 missing 规则误伤** — 上午刚把「相对 href 找不到文件」升成 FAIL，今天下午就撞到它的反例：`<base href="/wiki/">` 的文档里，`href="style.css"` 是按 base 解析到服务器的，本地目录里当然没有。按新规则这种完全正确的页面会 exit 1。
   改法：检测 `<base href>`（BASE_TAG），有 base 时相对链接一律归入「无法解析」的 note（原因标 base-href），不再当 missing。note 文案同步补上 base-relative 这个词。
   验证：新增 1 个用例（base + 相对 href → exit 0 且出现 note），128 个测试全过；没有 base 的页面里缺文件仍然 FAIL（老用例没动）。
+- **18:36 同一份调色板写在两个文件里，对比度结果整段打印两遍** — 真实例子就是博客：`blog/assets/post.css` 和 `assets/styles.css` 各自声明了一份同名 palettes（子页面要能独立打开），`contrast.py --css post.css --css styles.css` 于是把 `text on bg` / `muted on bg` / `text on surface` 三行原样输出了两次。设计系统把 tokens 拆成 tokens.css + brand.css 时必然这样，行数翻倍、看着像查了 7 个对，其实 4 个。
+  改法：main() 收完所有 rows 后按 (label, fg, bg, min) 去重，保序。已有的「same values printed once」只覆盖了 `--all-blocks` 的单文件情形，多文件这条没管。
+  验证：新增 1 个用例（两个文件同一 :root → `text on bg` 只出现一次），129 个测试全过；用真博客复跑，5 行（原来 8 行）。

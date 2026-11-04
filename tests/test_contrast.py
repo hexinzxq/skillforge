@@ -388,7 +388,25 @@ class ThemeSplitTests(unittest.TestCase):
         finally:
             Path(path).unlink()
 
-    def test_role_contrast_is_paired_with_role_bg_only(self):
+    def test_the_same_palette_in_two_sheets_is_printed_once(self):
+        # Splitting tokens.css from a subpage sheet is normal, and both halves
+        # redeclare text/bg so the subpage works standalone. Same pair, same
+        # verdict: one line.
+        css = ":root { --bg: #ffffff; --text: #111111; }"
+        paths = []
+        try:
+            for _ in range(2):
+                with tempfile.NamedTemporaryFile("w", suffix=".css", delete=False) as handle:
+                    handle.write(css)
+                    paths.append(handle.name)
+            code, out = run("--css", paths[0], "--css", paths[1])
+            self.assertEqual(code, 0)
+            self.assertEqual(out.count("text on bg"), 1)
+        finally:
+            for path in paths:
+                Path(path).unlink()
+
+
         # `-fg` is a foreground on the page surface, so pairing it with `-bg`
         # invents unreadable combinations (36 of them on real Bootstrap).
         code, out = run("--css", str(FIXTURES / "tokens-bootstrap-shape.css"))
