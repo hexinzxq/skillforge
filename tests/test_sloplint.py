@@ -270,7 +270,19 @@ class RuleTests(unittest.TestCase):
         self.assertIn("literal-color", out)
         self.assertEqual(self.scan_css(".card { background: #ffffff; }")[0], 0)
 
-    def test_token_declarations_may_hold_literals(self):
+    def test_wide_gamut_color_function_is_a_literal(self):
+        # `color(display-p3 ...)` is a literal exactly like `#ff0000`; wide-gamut
+        # accents ship this way now, and the rule asks for a token instead.
+        code, out = self.scan_css(".badge { color: color(display-p3 0.8 0.2 0.1); }")
+        self.assertEqual(code, 0, out)
+        self.assertIn("literal-color", out)
+        self.assertIn("color(display-p3", out)
+        # A token-based mix is not a literal: nothing to flag.
+        code, out = self.scan_css(
+            ".card { background: color-mix(in oklab, var(--accent) 20%, transparent); }")
+        self.assertNotIn("literal-color", out)
+
+
         code, out = self.scan_css(":root { --bg: #fafafa; } .card { background: var(--bg); }")
         self.assertEqual(code, 0)
         self.assertNotIn("literal-color", out)

@@ -129,3 +129,6 @@
 - **18:36 同一份调色板写在两个文件里，对比度结果整段打印两遍** — 真实例子就是博客：`blog/assets/post.css` 和 `assets/styles.css` 各自声明了一份同名 palettes（子页面要能独立打开），`contrast.py --css post.css --css styles.css` 于是把 `text on bg` / `muted on bg` / `text on surface` 三行原样输出了两次。设计系统把 tokens 拆成 tokens.css + brand.css 时必然这样，行数翻倍、看着像查了 7 个对，其实 4 个。
   改法：main() 收完所有 rows 后按 (label, fg, bg, min) 去重，保序。已有的「same values printed once」只覆盖了 `--all-blocks` 的单文件情形，多文件这条没管。
   验证：新增 1 个用例（两个文件同一 :root → `text on bg` 只出现一次），129 个测试全过；用真博客复跑，5 行（原来 8 行）。
+- **21:41 `color(display-p3 …)` 这种宽色域字面量 sloplint 看不见** — `literal-color` 只认 hex 和 rgba/hsla/oklch/oklab/lab/lch，漏了 CSS Color 4 的通用 `color()` 函数。P3 现在是真实设计系统里出现的东西（渐变、品牌强调色），模型写 `color: color(display-p3 .8 .2 .1)` 而不是引用 token 时，扫描器一句不报、exit 0。
+  改法：COLOR_LITERAL 增加 `color\([^)]*\)` 分支；`color-mix(in oklab, var(--accent) 20%, transparent)` 这类从 token 派生的写法不受影响（没有 `color(` 字面）。docs 里 literal-color 那一行同步补上 color()。
+  验证：新增 1 个用例（P3 字面量必须报 literal-color；token 派生的 color-mix 不报），130 个测试全过。

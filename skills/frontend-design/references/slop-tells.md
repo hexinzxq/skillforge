@@ -27,7 +27,7 @@ the skill.
 
 | rule | what it catches | why |
 |---|---|---|
-| `literal-color` | hex/rgb/hsl/oklch literal outside a token declaration | components should reference roles, so a theme swap stays possible |
+| `literal-color` | hex/rgb/hsl/oklch/lab/lch/`color()` literal outside a token declaration (a `color-mix()` built from tokens is fine) | components should reference roles, so a theme swap stays possible |
 | `eyebrow` | `text-transform: uppercase` + `letter-spacing` in one rule | tracked-out ALL-CAPS labels above every section are the generated look |
 | `focus-not-visible` | `outline: none` replaced on `:focus` only | works, but every mouse click flashes the ring — `:focus-visible` shows it only for keyboard use |
 

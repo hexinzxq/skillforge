@@ -28,7 +28,7 @@ BASE_TAG = re.compile(r"<base\b[^>]*\bhref\s*=", re.I)
 HREF_ATTR = re.compile(r'\bhref\s*=\s*["\']([^"\']+)["\']', re.I)
 CSS_RULE = re.compile(r"([^{}]+)\{([^{}]*)\}", re.S)
 COLOR_LITERAL = re.compile(
-    r"(#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab|lab|lch)\([^)]*\))"
+    r"(#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab|lab|lch|color)\([^)]*\))"
 )
 THEME_SELECTOR = re.compile(r":root|\[data-theme", re.I)
 FULL_DOC = re.compile(r"<!doctype\s+html|<html\b", re.I)
