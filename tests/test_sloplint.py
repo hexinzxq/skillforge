@@ -52,7 +52,24 @@ class FixtureTests(unittest.TestCase):
             self.assertIn("not scanned", out)
             self.assertIn("/_next/static/css/app.css", out)
 
-    def test_remote_stylesheet_is_named_too(self):
+    def test_missing_local_stylesheet_fails(self):
+        # A relative href that does not resolve is not "unscanned" like a CDN
+        # sheet — the page ships unstyled. Renames and typos land here.
+        html = (
+            '<!doctype html><html><head>'
+            '<meta name="viewport" content="width=device-width, initial-scale=1">'
+            '<link rel="stylesheet" href="assets/styles.css">'
+            '</head><body><p>hi</p></body></html>'
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            page = Path(tmp) / "index.html"
+            page.write_text(html)
+            code, out = run(str(page))
+            self.assertEqual(code, 1, out)
+            self.assertIn("missing-stylesheet", out)
+            self.assertIn("assets/styles.css", out)
+
+
         html = (
             '<!doctype html><html><head>'
             '<meta name="viewport" content="width=device-width, initial-scale=1">'

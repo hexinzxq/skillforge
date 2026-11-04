@@ -120,3 +120,6 @@
 - **08:07 根相对的 `<link>` 被静默跳过，摘要却写「clean」** — 拿 `next export` 出来的真页面（/Users/xin/Documents/Codex/2026-05-03/new-chat/out/index.html）试：它整站样式都在 `/_next/static/css/faf81e09ecf69405.css`，sloplint 输出 `clean: 0 tell(s) wairable, 0 failures (1 file(s) scanned)`——一句都没提那份 CSS 没被打开。这正是这轮反复撞到的病：工具不说清自己查了什么，就把「没查」卖成「没问题」。
   改法：`linked_stylesheets()` 改成返回 (可读的, 跳过的)；跳过 = 远程 / 根相对 → 无法从磁盘解析 / 文件不存在。main() 汇总后在摘要前打一行 `note: N linked stylesheet(s) not scanned (remote, root-relative, or missing): …`，最多列 4 条加省略。
   验证：新增 2 个用例（`/_next/…` 与 CDN 的 href 必须出现在 note 里，且原文的 href 不丢），126 个测试全过；本地可读的 <link> 仍然照常跟进扫描，老行为不变。
+- **12:41 指向不存在文件的相对 `<link>` 只被当成「跳过的」** — 早上那条 note 把三种原因写在一行里：远程、根相对、文件不存在。前两种确实没法从磁盘解析，第三种不一样——`href="assets/styles.css"` 而文件被改名/拼错时，页面就是裸着上线的，而 sloplint 只打一行 note、退出 0。实测：造一个 `assets/styles.css` 不存在的页面，原来 `exit 0` + note。
+  改法：`linked_stylesheets()` 返回 (可读, [(行号, href, 原因)])，原因分 remote / root-relative / missing；missing 变成 FAIL `missing-stylesheet`（带行号），其余两种仍进 note。
+  验证：新增 1 个用例（缺文件的相对 href → exit 1、输出 missing-stylesheet 与路径），127 个测试全过；根相对和 CDN 的两个老用例仍是 exit 0 + note，没被误伤。
