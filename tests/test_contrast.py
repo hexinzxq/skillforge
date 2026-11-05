@@ -73,7 +73,36 @@ class TokenSheetTests(unittest.TestCase):
         self.assertIn("on-accent over accent", labels)
         self.assertIn("border on bg", labels)
 
-    def test_border_uses_the_ui_threshold(self):
+    def test_focus_ring_is_checked_at_the_ui_threshold(self):
+        # shadcn's default ring is oklch(0.708 0 0) — 2.58:1 on white. Nothing
+        # else in a token sheet reports that, and a focus ring is a state
+        # indicator, so 1.4.11 applies without the border ambiguity.
+        css = ":root { --bg: #ffffff; --text: #0a0a0a; --ring: oklch(0.708 0 0); }"
+        with tempfile.NamedTemporaryFile("w", suffix=".css", delete=False) as handle:
+            handle.write(css)
+            path = handle.name
+        try:
+            code, out = run("--css", path)
+            self.assertEqual(code, 1, out)
+            self.assertIn("ring on bg", out)
+            self.assertIn("2.58:1", out)
+        finally:
+            Path(path).unlink()
+
+    def test_ring_falls_back_to_background_and_passes_when_dark(self):
+        css = ":root { --background: #ffffff; --ring: #222222; }"
+        with tempfile.NamedTemporaryFile("w", suffix=".css", delete=False) as handle:
+            handle.write(css)
+            path = handle.name
+        try:
+            code, out = run("--css", path)
+            self.assertEqual(code, 0, out)
+            self.assertIn("ring on background", out)
+            self.assertIn("PASS", out)
+        finally:
+            Path(path).unlink()
+
+
         tokens = {"bg": "#ffffff", "border": "#e5e7eb"}
         (_, _, _, threshold), = contrast.pairs_from_tokens(tokens)
         self.assertEqual(threshold, 3.0)

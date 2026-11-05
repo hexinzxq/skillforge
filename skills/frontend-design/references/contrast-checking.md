@@ -23,12 +23,15 @@ fix list) · `2` usage/input error.
 | `--<role>-foreground` (shadcn) | against `--<role>` at 4.5:1 |
 | `foreground` on `background` (shadcn) | 4.5:1 |
 | `text` / `muted` against `bg`, `text` against `surface` | 4.5:1 |
+| `ring` / `focus-ring` / `focus` against `bg` (or `background`) | 3:1 — a focus ring is a state indicator, no ambiguity |
 | `border` against `bg` | reported against 3:1, **advisory** (see below) |
 
 shadcn's `-foreground` convention is honored because it is the most-copied
 sheet on the internet — running it against their real `globals.css` finds real
 issues: dark `--destructive-foreground` sits at **1.66:1** on `--destructive`
-(red on red), light `muted-foreground` 4.35:1, light `border` 1.26:1.
+(red on red), light `muted-foreground` 4.35:1, light `border` 1.26:1, and its
+default `ring` (`oklch(0.708 0 0)`, 2.58:1 on white) — a focus ring below 3:1
+is the one thing every shadcn sheet ships broken.
 
 Border rows are **advisory**: they are printed with their ratio and marked
 `ADVISORY`, and they do not fail the run. `--border` is an input outline in

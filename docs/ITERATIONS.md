@@ -135,3 +135,6 @@
 - **08:06 `--border` 一律按 3:1 判 FAIL，把排版分隔线也当成控件边框** — 真实输入：用户自己那个已上线的博客（blog/assets/styles.css），卡片分隔线 `#26313a` 在 `#101418` 上 1.39:1，跑 `contrast.py --css` 直接 exit 1。可那条线是排版分隔，不是输入框描边；WCAG 1.4.11 的 3:1 只约束「识别控件所必需的边框」。反过来 shadcn 的 `--border` 真的是 input 描边（1.26:1 确实该修）。静态看 token 表分不出这两种用途，所以只能：报出数字、标明用途要靠人看、不 FAIL。
   改法：`render()` 里 label 匹配 `border on …` 的行改为 advisory——打印真实比值并标 `ADVISORY (control outlines need 3:1)`，计入 advisories 不计入 failures；verdict 分开报（「all text pairs pass — 1 border row(s) below 3:1, advisory」）。`--pair` 仍是硬阈值，用户想强制就自己传。SKILL.md 的 101 / 201 两处和 contrast-checking.md 的约定表同步改了。
   验证：改 1 个老用例（shadcn oklch fixture 现在 exit 0 且出现 ADVISORY）、新增 1 个（border 低 + text 也低时仍 exit 1，advisory 不能盖住真失败），126 个测试全过；真博客复跑 exit 0，其余四条 text 对不受影响。
+- **12:36 焦点环根本没被检查过，而 shadcn 默认那个是 2.58:1** — SKILL 的清单写着「focus rings ≥ 3:1」，但 `contrast.py` 只认 text/muted/foreground/border 几种约定，`--ring` 从来没人看。拿 shadcn v4 的默认值试：`--ring: oklch(0.708 0 0)` 在白底上 2.58:1，一整个设计系统默认就低于 3:1，工具却报 all pairs pass。
+  改法：`pairs_from_tokens` 增加 ring / focus-ring / focus 三种名字，对着 `bg`（没有就 `background`）按 3:1 硬判。焦点环属于「识别状态的图形」，1.4.11 没有 border 那种歧义，所以可以硬 FAIL。contrast-checking.md 的约定表加一行，SKILL.md 清单同步。
+  验证：新增 2 个用例（shadcn 默认 ring → exit 1、输出 2.58:1；没有 bg 时回退 background 且深色 ring 通过），128 个测试全过。

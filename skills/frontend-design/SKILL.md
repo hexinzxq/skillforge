@@ -198,7 +198,7 @@ Words exist to make the interface usable, not to decorate.
 ### Ship checklist
 
 - [ ] Palette has 6 named roles; accent used once per view
-- [ ] `scripts/contrast.py --css <tokens>` exits 0 (all text ≥ 4.5:1; any border marked `ADVISORY` may outline a control — check where the token is used)
+- [ ] `scripts/contrast.py --css <tokens>` exits 0 (all text ≥ 4.5:1, any `ring`/`focus` token ≥ 3:1; a border marked `ADVISORY` may outline a control — check where the token is used)
 - [ ] One type scale ratio; body ≥ 16px; measure ≤ 80ch
 - [ ] Every interactive element has hover / focus-visible / disabled / loading
 - [ ] Empty, error, and long-content states render correctly

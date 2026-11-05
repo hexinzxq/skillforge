@@ -559,6 +559,14 @@ def pairs_from_tokens(tokens: dict[str, str]) -> list[tuple[str, str, str, float
             base = name[: -len("-contrast")]
             if f"{base}-bg" in tokens and base not in tokens:
                 out.append((f"{name} on {base}-bg", fg, tokens[f"{base}-bg"], WCAG_TEXT))
+    # Focus rings identify a state, so 1.4.11 applies without the border
+    # ambiguity: shadcn's own default ring (oklch(0.708 0 0)) sits at ~2.1:1 on
+    # white, and nothing else in the sheet would ever report that.
+    for name in ("ring", "focus-ring", "focus"):
+        if name in tokens and "bg" in tokens:
+            out.append((f"{name} on bg", tokens[name], tokens["bg"], WCAG_UI))
+        if name in tokens and "background" in tokens and "bg" not in tokens:
+            out.append((f"{name} on background", tokens[name], tokens["background"], WCAG_UI))
     if "border" in tokens and "bg" in tokens:
         out.append(("border on bg", tokens["border"], tokens["bg"], WCAG_UI))
     if "border" in tokens and "background" in tokens and "bg" not in tokens:
