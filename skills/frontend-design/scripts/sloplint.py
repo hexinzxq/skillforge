@@ -32,6 +32,7 @@ COLOR_LITERAL = re.compile(
 )
 THEME_SELECTOR = re.compile(r":root|\[data-theme", re.I)
 FULL_DOC = re.compile(r"<!doctype\s+html|<html\b", re.I)
+PAGE_RULE = re.compile(r"@page\b")
 VIEWPORT_META = re.compile(r"<meta\b[^>]*\bname\s*=\s*[\"']?viewport\b", re.I)
 VIEWPORT_TAG = re.compile(r"<meta\b[^>]*\bname\s*=\s*[\"']?viewport\b[^>]*>", re.I)
 CONTENT_ATTR = re.compile(r"\bcontent\s*=\s*([\"'])(.*?)\1", re.S | re.I)
@@ -166,10 +167,19 @@ def check_html(path: Path, text: str) -> list[Finding]:
     # 980px and shrinks it, which is the single most common "looks fine on my
     # laptop" report.
     if FULL_DOC.search(text) and not VIEWPORT_META.search(text):
-        out.append(Finding(str(path), 1, "FAIL", "no-viewport",
-                           "full page has no `<meta name=\"viewport\">` — phones lay it "
-                           "out at 980px and shrink the text; add "
-                           "`width=device-width, initial-scale=1`"))
+        # A document that declares @page is a print/PDF target: its layout is
+        # A4, the viewport never applies, and asking it for a viewport meta is
+        # advice that cannot be followed (a resume build is exactly this).
+        if PAGE_RULE.search(text):
+            out.append(Finding(str(path), 1, "TELL", "no-viewport",
+                               "print-target document (@page) has no viewport meta — "
+                               "fine for the PDF, but if this page is also opened on "
+                               "phones it needs `width=device-width, initial-scale=1`"))
+        else:
+            out.append(Finding(str(path), 1, "FAIL", "no-viewport",
+                               "full page has no `<meta name=\"viewport\">` — phones lay it "
+                               "out at 980px and shrink the text; add "
+                               "`width=device-width, initial-scale=1`"))
     # Zoom is an accessibility feature, not a design knob: WCAG 1.4.4 wants the
     # page to reach 200% without loss. `user-scalable=no` and a low
     # maximum-scale take that away from low-vision users.

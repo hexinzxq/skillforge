@@ -206,6 +206,17 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(self.scan_css("body { overflow-x: hidden; }")[0], 1)
         self.assertEqual(self.scan_css(".carousel { overflow-x: hidden; }")[0], 0)
 
+    def test_a_print_document_is_not_made_to_ask_for_a_viewport(self):
+        # An A4/PDF build (@page) has no viewport at all; demanding one is
+        # advice that cannot be followed. It stays visible as a tell.
+        html = ('<!doctype html><html><head><title>cv</title>'
+                '<style>@page { size: A4; margin: 0 }</style></head>'
+                '<body><p>hello</p></body></html>')
+        code, out = self.scan_html(html)
+        self.assertEqual(code, 0, out)
+        self.assertIn("no-viewport", out)
+        self.assertIn("print-target", out)
+
     def test_full_page_without_viewport_fails(self):
         code, out = self.scan_html(
             '<!doctype html><html lang="en"><head><title>t</title></head>'

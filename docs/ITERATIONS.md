@@ -138,3 +138,6 @@
 - **12:36 焦点环根本没被检查过，而 shadcn 默认那个是 2.58:1** — SKILL 的清单写着「focus rings ≥ 3:1」，但 `contrast.py` 只认 text/muted/foreground/border 几种约定，`--ring` 从来没人看。拿 shadcn v4 的默认值试：`--ring: oklch(0.708 0 0)` 在白底上 2.58:1，一整个设计系统默认就低于 3:1，工具却报 all pairs pass。
   改法：`pairs_from_tokens` 增加 ring / focus-ring / focus 三种名字，对着 `bg`（没有就 `background`）按 3:1 硬判。焦点环属于「识别状态的图形」，1.4.11 没有 border 那种歧义，所以可以硬 FAIL。contrast-checking.md 的约定表加一行，SKILL.md 清单同步。
   验证：新增 2 个用例（shadcn 默认 ring → exit 1、输出 2.58:1；没有 bg 时回退 background 且深色 ring 通过），128 个测试全过。
+- **13:38 no-viewport 把 A4 打印构建也判成 FAIL，而它根本没有 viewport 概念** — 真实输入：/Users/xin/Documents/deepseek-harness/default-workspace/resume-md/.build/resume.html（求职简历的打印构建，`<style>@page { size: A4; margin: 0 }`，全文没有 `<meta name="viewport">`）。sloplint 报 `FAIL no-viewport`，但这份文件的用途是打印/导出 PDF，手机缩放那条建议在这里无法执行——文档自己声明了纸张。
+  改法：`check_html` 里加 `PAGE_RULE = re.compile(r"@page\b")`；完整文档缺 viewport 时，若自己声明了 `@page` 就降级为 TELL（`print-target document (@page) has no viewport meta — fine for the PDF, but if this page is also opened on phones…`），其余仍 FAIL。没有 viewport 的普通页面判定不变。
+  验证：新增 1 个用例（@page 文档 → exit 0、出现 no-viewport 且含 print-target），128 个测试全过；resume.html 复跑退出码 0（剩 literal-color tells，本来就是该 waive 的）。
