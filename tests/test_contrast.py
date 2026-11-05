@@ -392,6 +392,41 @@ class CascadeTests(unittest.TestCase):
         self.assertEqual(out.count("declare colours but no pair"), 1)
 
 
+class PrefersColorSchemeTests(unittest.TestCase):
+    """`@media (prefers-color-scheme: dark) { :root { ... } }` is the most
+    common way a sheet carries two themes. Both blocks used to collapse into
+    one scope named `:root`, so flat reading kept whichever came last and the
+    other theme was never checked at all."""
+
+    SHEET = (":root { --bg: #ffffff; --text: #111111; --muted: #d0d0d0; }\n"
+             "@media (prefers-color-scheme: dark) {\n"
+             "  :root { --bg: #111111; --text: #eeeeee; --muted: #2a2a2a; }\n"
+             "}\n")
+
+    def test_flat_read_refuses_and_names_the_media_scope(self):
+        with self.assertRaises(ValueError) as ctx:
+            contrast.read_tokens(self.SHEET)
+        self.assertIn("prefers-color-scheme: dark", str(ctx.exception))
+
+    def test_exact_block_name_beats_the_substring(self):
+        tokens = contrast.read_tokens(self.SHEET, block=":root")
+        self.assertEqual(tokens["bg"], "#ffffff")
+        tokens = contrast.read_tokens(self.SHEET, block="prefers-color-scheme: dark")
+        self.assertEqual(tokens["bg"], "#111111")
+
+    def test_all_blocks_checks_the_light_theme_too(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".css", delete=False) as handle:
+            handle.write(self.SHEET)
+            path = handle.name
+        try:
+            code, out = run("--css", path, "--all-blocks")
+            self.assertEqual(code, 1, out)
+            self.assertIn(":root muted on bg", out)      # 1.54:1, was invisible
+            self.assertIn("1.54:1", out)
+        finally:
+            Path(path).unlink()
+
+
 class ColorMixTests(unittest.TestCase):
     """Bootstrap's palette is `color-mix(in oklch, var(--bs-white) 94%, …)`.
     A checker that only reads literals sees none of it."""

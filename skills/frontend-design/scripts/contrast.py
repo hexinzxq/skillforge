@@ -181,12 +181,41 @@ def _strip_css_comments(css: str) -> str:
     return COMMENT_RE.sub(lambda m: "\n" * m.group(0).count("\n"), css)
 
 
+AT_RULE = re.compile(r"@(media|supports|container|layer|scope)\b[^{;]*\{", re.I)
+
+
+def _at_rule_spans(css: str) -> list[tuple[int, int, str]]:
+    """(start, end, prelude) offsets of at-rule blocks, by brace depth.
+
+    `_scopes` matches innermost blocks only, so a `@media (prefers-color-scheme:
+    dark) { :root { ... } }` override arrives looking exactly like a second
+    `:root` — and flat reading merged the two themes silently, keeping whichever
+    came last. The prelude has to travel with the block name.
+    """
+    spans: list[tuple[int, int, str]] = []
+    for match in AT_RULE.finditer(css):
+        depth, i = 0, match.end() - 1
+        while i < len(css):
+            if css[i] == "{":
+                depth += 1
+            elif css[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    spans.append((match.start(), i, match.group(0)[:-1].strip()))
+                    break
+            i += 1
+    return spans
+
+
 def _scopes(css: str) -> list[tuple[str, dict[str, str]]]:
     """(selector, {name: value}) per block that holds at least one literal color,
     in document order. Nested blocks (@media …) match separately, which is how
     token sheets actually nest. Selector is normalized to its last token."""
     out: list[tuple[str, dict[str, str]]] = []
-    for sel, body in BLOCK_RE.findall(_strip_css_comments(css)):
+    clean = _strip_css_comments(css)
+    spans = _at_rule_spans(clean)
+    for match in BLOCK_RE.finditer(clean):
+        sel, body = match.group(1), match.group(2)
         vals: dict[str, str] = {}
         for name, value in VAR_RE.findall(body):
             value = value.strip()
@@ -209,6 +238,12 @@ def _scopes(css: str) -> list[tuple[str, dict[str, str]]]:
             # (@charset "UTF-8"; @layer a, b;) lands in front of the selector.
             if ";" in name:
                 name = name.rsplit(";", 1)[1].strip() or name
+            # A block nested in @media/@supports belongs to that condition: two
+            # `:root` blocks under different conditions are different scopes.
+            for start, end, prelude in spans:
+                if start < match.start() < end:
+                    name = f"{prelude} {name}"
+                    break
             out.append((name, vals))
     return out
 
@@ -493,7 +528,12 @@ def read_tokens(css: str, block: str | None = None) -> dict[str, str]:
     scopes = _scopes(css)
     if block is not None:
         needle = block.lower()
-        scopes = [s for s in scopes if needle in s[0].lower()]
+        # An exact name wins: once an @media override is part of the name,
+        # `--block :root` is a substring of `@media (prefers-color-scheme: dark)
+        # :root` too, and keeping the last match would hand back the theme the
+        # user did not ask for.
+        exact = [s for s in scopes if s[0].lower() == needle]
+        scopes = exact or [s for s in scopes if needle in s[0].lower()]
         if not scopes:
             raise ValueError(f"no block matching --block {block!r}")
     if block is None:
@@ -507,8 +547,8 @@ def read_tokens(css: str, block: str | None = None) -> dict[str, str]:
             more = "" if len(multi) <= 6 else f" … +{len(multi) - 6} more"
             raise ValueError(
                 "same tokens defined in multiple blocks — flat reading would mix "
-                f"scopes: {shown}{more}. Pass --block :root or --block .dark, or "
-                "split the sheet into one scope per file.")
+                f"scopes: {shown}{more}. Pass --block <one of those names> (or "
+                "--all-blocks), or split the sheet into one scope per file.")
     tokens: dict[str, str] = {}
     for _sel, vals in scopes:
         tokens.update(vals)

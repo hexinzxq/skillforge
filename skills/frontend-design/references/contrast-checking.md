@@ -72,6 +72,12 @@ python3 scripts/contrast.py --css tokens.css --block .dark
 python3 scripts/contrast.py --css tokens.css --all-blocks   # both, in one report
 ```
 
+The same applies to `@media (prefers-color-scheme: dark)` overrides: a `:root`
+inside that query is a different scope from the top-level `:root`, even though
+both selectors read the same. The block name carries the condition
+(`@media (prefers-color-scheme: dark) :root`), and `--block :root` still means
+the plain one — an exact name wins over a substring.
+
 Check both, fix both — a token that passes in light mode can fail in dark.
 `--all-blocks` is the one-command version: each pair is prefixed with the block
 it came from, and the exit code covers every block (this is how shadcn's real
