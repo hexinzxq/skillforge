@@ -599,17 +599,35 @@ def hexstr(rgb: tuple[int, int, int]) -> str:
     return "#{:02x}{:02x}{:02x}".format(*rgb)
 
 
+# A `border` token is a control outline in some sheets (shadcn draws inputs
+# with it) and a divider in others (the blog's card rules sit at 1.39:1 on
+# purpose). Static analysis cannot tell them apart, and WCAG 1.4.11 only asks
+# 3:1 of the ones that identify a component — so border rows are reported and
+# never fail the run.
+ADVISORY_ROW = re.compile(r"\bborder on \b")
+
+
 def render(rows: list[tuple[str, tuple[int, int, int], tuple[int, int, int], float]]
-           ) -> tuple[str, int]:
-    lines, failures = [], 0
+           ) -> tuple[str, int, int]:
+    lines, failures, advisories = [], 0, 0
     width = max((len(r[0]) for r in rows), default=0)
     for label, fg, bg, minimum in rows:
         value = ratio_rgb(fg, bg)
         ok = value >= minimum
-        failures += 0 if ok else 1
-        mark = "PASS" if ok else f"FAIL (needs {minimum:g}:1)"
+        advisory = bool(ADVISORY_ROW.search(label))
+        if not ok:
+            if advisory:
+                advisories += 1
+            else:
+                failures += 1
+        if ok:
+            mark = "PASS"
+        elif advisory:
+            mark = f"ADVISORY (control outlines need {minimum:g}:1)"
+        else:
+            mark = f"FAIL (needs {minimum:g}:1)"
         lines.append(f"{label:<{width}}  {hexstr(fg)} on {hexstr(bg)}  {value:5.2f}:1  {mark}")
-    return "\n".join(lines), failures
+    return "\n".join(lines), failures, advisories
 
 
 def main(argv: list[str]) -> int:
@@ -710,10 +728,18 @@ def main(argv: list[str]) -> int:
         unique_rows.append(row)
     rows = unique_rows
 
-    out, failures = render(rows)
+    out, failures, advisories = render(rows)
     print(out)
     if not args.quiet:
-        verdict = "all pairs pass" if not failures else f"{failures} pair(s) below threshold"
+        if failures:
+            verdict = f"{failures} pair(s) below threshold"
+        elif advisories:
+            verdict = ("all text pairs pass — " if any(not ADVISORY_ROW.search(r[0]) for r in rows)
+                       else "") + (
+                f"{advisories} border row(s) below 3:1, advisory: only control outlines "
+                f"and focus rings must reach it")
+        else:
+            verdict = "all pairs pass"
         print(f"\n{verdict}")
     return 1 if failures else 0
 

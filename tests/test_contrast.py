@@ -172,12 +172,30 @@ class ColorFunctionTests(unittest.TestCase):
         self.assertIn("foreground on background", labels)
         self.assertIn("primary-foreground on primary", labels)
         self.assertIn("border on background", labels)
+        # shadcn's border is 1.26:1; it is reported, but advisory — whether it
+        # outlines an input (must reach 3:1) or a card (may stay subtle) is not
+        # in the token sheet.
         code, out = run("--css", str(FIXTURES / "tokens-oklch.css"))
-        self.assertEqual(code, 1)
+        self.assertEqual(code, 0, out)
         self.assertIn("border on background", out)
         self.assertIn("1.26:1", out)
+        self.assertIn("ADVISORY", out)
 
-    def test_explicit_oklch_pair_checks_normally(self):
+    def test_advisory_border_does_not_mask_a_real_failure(self):
+        css = (":root { --bg: #ffffff; --text: #bbbbbb; --border: #f5f5f5; }")
+        with tempfile.NamedTemporaryFile("w", suffix=".css", delete=False) as handle:
+            handle.write(css)
+            path = handle.name
+        try:
+            code, out = run("--css", path)
+            self.assertEqual(code, 1, out)   # text on bg is 1.9:1
+            self.assertIn("text on bg", out)
+            self.assertIn("FAIL", out)
+            self.assertIn("ADVISORY", out)
+        finally:
+            Path(path).unlink()
+
+
         code, out = run("--pair", "text:oklch(0.145 0 0) on bg:oklch(1 0 0)")
         self.assertEqual(code, 0)
         self.assertIn("19.80:1", out)

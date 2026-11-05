@@ -23,12 +23,21 @@ fix list) · `2` usage/input error.
 | `--<role>-foreground` (shadcn) | against `--<role>` at 4.5:1 |
 | `foreground` on `background` (shadcn) | 4.5:1 |
 | `text` / `muted` against `bg`, `text` against `surface` | 4.5:1 |
-| `border` against `bg` | 3:1 (UI component threshold, WCAG 1.4.11) |
+| `border` against `bg` | reported against 3:1, **advisory** (see below) |
 
 shadcn's `-foreground` convention is honored because it is the most-copied
 sheet on the internet — running it against their real `globals.css` finds real
 issues: dark `--destructive-foreground` sits at **1.66:1** on `--destructive`
 (red on red), light `muted-foreground` 4.35:1, light `border` 1.26:1.
+
+Border rows are **advisory**: they are printed with their ratio and marked
+`ADVISORY`, and they do not fail the run. `--border` is an input outline in
+shadcn and a card divider in plenty of shipped sites (one real blog sits at
+1.39:1 on purpose); WCAG 1.4.11 asks 3:1 of the borders that identify a
+component, and the token sheet does not say which usage is which. Read where
+the token is used: if it outlines an input, button, or focus ring, fix it to
+3:1; if it separates sections, a subtle line is correct. `--pair` is always
+hard — pass the threshold you mean when you want the run to fail.
 
 ## Value formats
 

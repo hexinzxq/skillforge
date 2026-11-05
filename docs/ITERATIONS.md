@@ -132,3 +132,6 @@
 - **21:41 `color(display-p3 …)` 这种宽色域字面量 sloplint 看不见** — `literal-color` 只认 hex 和 rgba/hsla/oklch/oklab/lab/lch，漏了 CSS Color 4 的通用 `color()` 函数。P3 现在是真实设计系统里出现的东西（渐变、品牌强调色），模型写 `color: color(display-p3 .8 .2 .1)` 而不是引用 token 时，扫描器一句不报、exit 0。
   改法：COLOR_LITERAL 增加 `color\([^)]*\)` 分支；`color-mix(in oklab, var(--accent) 20%, transparent)` 这类从 token 派生的写法不受影响（没有 `color(` 字面）。docs 里 literal-color 那一行同步补上 color()。
   验证：新增 1 个用例（P3 字面量必须报 literal-color；token 派生的 color-mix 不报），130 个测试全过。
+- **08:06 `--border` 一律按 3:1 判 FAIL，把排版分隔线也当成控件边框** — 真实输入：用户自己那个已上线的博客（blog/assets/styles.css），卡片分隔线 `#26313a` 在 `#101418` 上 1.39:1，跑 `contrast.py --css` 直接 exit 1。可那条线是排版分隔，不是输入框描边；WCAG 1.4.11 的 3:1 只约束「识别控件所必需的边框」。反过来 shadcn 的 `--border` 真的是 input 描边（1.26:1 确实该修）。静态看 token 表分不出这两种用途，所以只能：报出数字、标明用途要靠人看、不 FAIL。
+  改法：`render()` 里 label 匹配 `border on …` 的行改为 advisory——打印真实比值并标 `ADVISORY (control outlines need 3:1)`，计入 advisories 不计入 failures；verdict 分开报（「all text pairs pass — 1 border row(s) below 3:1, advisory」）。`--pair` 仍是硬阈值，用户想强制就自己传。SKILL.md 的 101 / 201 两处和 contrast-checking.md 的约定表同步改了。
+  验证：改 1 个老用例（shadcn oklch fixture 现在 exit 0 且出现 ADVISORY）、新增 1 个（border 低 + text 也低时仍 exit 1，advisory 不能盖住真失败），126 个测试全过；真博客复跑 exit 0，其余四条 text 对不受影响。

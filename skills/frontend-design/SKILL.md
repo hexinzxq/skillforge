@@ -98,7 +98,7 @@ Roles, not shades. Six roles are enough:
 Rules that prevent 90% of bad palettes:
 
 - **One accent.** A second accent is a decision to justify, not a default.
-- Text on background ≥ **4.5:1**; large text (≥24px or ≥19px bold) ≥ **3:1**; UI borders and focus rings ≥ **3:1**.
+- Text on background ≥ **4.5:1**; large text (≥24px or ≥19px bold) ≥ **3:1**; UI borders and focus rings ≥ **3:1** (border tokens are advisory in `contrast.py` — check where the token is used)
 - Never encode meaning in hue alone (error/red + icon + words).
 - Dark mode is not inverted light mode: raise surfaces slightly (`+4–8%` lightness per elevation step), desaturate accents ~10%, and keep shadows subtle/absent — use surface steps for depth.
 - Tinted near-black (`#0B0B0B`) as "black", and warm cream (`#F4F1EA`) with a clay accent are the two most common generated palettes. Use them only if the brief asks.
@@ -198,7 +198,7 @@ Words exist to make the interface usable, not to decorate.
 ### Ship checklist
 
 - [ ] Palette has 6 named roles; accent used once per view
-- [ ] `scripts/contrast.py --css <tokens>` exits 0 (all text ≥ 4.5:1, borders and focus rings ≥ 3:1)
+- [ ] `scripts/contrast.py --css <tokens>` exits 0 (all text ≥ 4.5:1; any border marked `ADVISORY` may outline a control — check where the token is used)
 - [ ] One type scale ratio; body ≥ 16px; measure ≤ 80ch
 - [ ] Every interactive element has hover / focus-visible / disabled / loading
 - [ ] Empty, error, and long-content states render correctly
