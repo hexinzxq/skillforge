@@ -107,6 +107,24 @@ class TokenSheetTests(unittest.TestCase):
         (_, _, _, threshold), = contrast.pairs_from_tokens(tokens)
         self.assertEqual(threshold, 3.0)
 
+    def test_panel_and_card_are_treated_as_surfaces(self):
+        # A real Next.js app calls its raised panel `--panel`; text on it is as
+        # visible as text on the page, and `--surface` was the only name the
+        # tool knew, so those pairs went unchecked.
+
+        css = ":root { --bg: #edf1f7; --panel: #ffffff; --card: #ffffff; --text: #14171f; --muted: #777777; }"
+        with tempfile.NamedTemporaryFile("w", suffix=".css", delete=False) as handle:
+            handle.write(css)
+            path = handle.name
+        try:
+            code, out = run("--css", path)
+            self.assertEqual(code, 1, out)   # muted on panel/card is 4.48:1
+            for label in ("text on panel", "muted on panel", "text on card", "muted on card"):
+                self.assertIn(label, out)
+            self.assertIn("4.48:1", out)
+        finally:
+            Path(path).unlink()
+
     def test_missing_roles_are_skipped_not_crashed(self):
         self.assertEqual(contrast.pairs_from_tokens({"text": "#000"}), [])
 
@@ -224,7 +242,7 @@ class ColorFunctionTests(unittest.TestCase):
         finally:
             Path(path).unlink()
 
-
+    def test_explicit_oklch_pair_checks_normally(self):
         code, out = run("--pair", "text:oklch(0.145 0 0) on bg:oklch(1 0 0)")
         self.assertEqual(code, 0)
         self.assertIn("19.80:1", out)

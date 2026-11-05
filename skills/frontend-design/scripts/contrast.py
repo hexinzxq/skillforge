@@ -531,8 +531,16 @@ def pairs_from_tokens(tokens: dict[str, str]) -> list[tuple[str, str, str, float
         out.append(("text on bg", tokens["text"], tokens["bg"], WCAG_TEXT))
     if "muted" in tokens and "bg" in tokens:
         out.append(("muted on bg", tokens["muted"], tokens["bg"], WCAG_TEXT))
-    if "text" in tokens and "surface" in tokens:
-        out.append(("text on surface", tokens["text"], tokens["surface"], WCAG_TEXT))
+    # `surface` is shadcn's name for a raised panel; real sheets also call it
+    # `panel` or `card` (one Next.js app checked here does). Text that sits on
+    # those panels is as visible as text on the page, so check it too — but
+    # only for the plain text tokens, not for every role.
+    for surface in ("surface", "panel", "card"):
+        if surface not in tokens:
+            continue
+        for name in ("text", "muted"):
+            if name in tokens:
+                out.append((f"{name} on {surface}", tokens[name], tokens[surface], WCAG_TEXT))
     if "foreground" in tokens and "background" in tokens:
         out.append(("foreground on background",
                     tokens["foreground"], tokens["background"], WCAG_TEXT))
