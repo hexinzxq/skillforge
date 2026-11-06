@@ -56,19 +56,42 @@ VAR_DECL = re.compile(r"--([\w-]+)\s*:")
 
 
 class Finding:
-    def __init__(self, path: str, line: int, severity: str, rule: str, message: str):
+    def __init__(self, path: str, line: int, severity: str, rule: str, message: str,
+                 col: int | None = None):
         self.path = path
         self.line = line
+        self.col = col
         self.severity = severity
         self.rule = rule
         self.message = message
 
     def render(self) -> str:
-        return f"{self.path}:{self.line}  {self.severity:4s}  {self.rule}  {self.message}"
+        # `file:line:col` is what editors paste back into a jump box. The column
+        # only appears when it carries information: on a one-line minified
+        # bundle "line 1" locates nothing, and the near: snippet may match the
+        # file a dozen times.
+        where = f"{self.path}:{self.line}" + (f":{self.col}" if self.col else "")
+        return f"{where}  {self.severity:4s}  {self.rule}  {self.message}"
 
 
 def _line_at(text: str, pos: int, base_line: int) -> int:
     return base_line + text.count("\n", 0, pos)
+
+
+MINIFIED_LINE = 400
+
+
+def _loc(text: str, pos: int, base_line: int) -> tuple[int, int | None]:
+    """(line, column) — the column only when the line is too long to scan by eye.
+
+    A static export ships its CSS minified: one line of 100KB, where every
+    finding says line 1 and "near:" can match the same declaration twice.
+    """
+    line = _line_at(text, pos, base_line)
+    start = text.rfind("\n", 0, pos) + 1
+    end = text.find("\n", pos)
+    length = (len(text) if end < 0 else end) - start
+    return line, (pos - start + 1 if length > MINIFIED_LINE else None)
 
 
 def _regions(path: Path, text: str) -> list[tuple[int, str]]:
@@ -97,48 +120,51 @@ def check_css(path: Path, line: int, css: str, focus_kind: str) -> list[Finding]
     for rule in CSS_RULE.finditer(css):
         selector = " ".join(rule.group(1).split())
         body = rule.group(2)
-        body_line = _line_at(css, rule.start(2), line)
+        body_line, body_col = _loc(css, rule.start(2), line)
         theme = bool(THEME_SELECTOR.search(selector.split(",")[0].strip()))
 
         for decl in TRANSITION_DECL.finditer(body):
             value = decl.group(2).strip().rstrip(";")
-            line_no = _line_at(css, rule.start(2) + decl.start(), line)
+            line_no, col = _loc(css, rule.start(2) + decl.start(), line)
             targets = [_transition_target(part) for part in value.split(",")]
             if "all" in targets:
                 out.append(Finding(str(path), line_no, "FAIL", "transition-all",
                                    "`transition: all` — name the properties; `all` also "
-                                   "animates layout on resize"))
+                                   "animates layout on resize", col))
             layout = [prop for prop in targets if prop != "all" and LAYOUT_PROP.fullmatch(prop)]
             if layout:
                 out.append(Finding(str(path), line_no, "FAIL", "animate-geometry",
                                    f"`{decl.group(1)}` animates layout geometry "
-                                   f"({', '.join(layout)}) — animate transform/opacity instead"))
+                                   f"({', '.join(layout)}) — animate transform/opacity instead",
+                                   col))
 
         if re.search(r"\boutline\s*:\s*(?:none|0)\b", body, re.I):
             if focus_kind == "none":
                 out.append(Finding(str(path), body_line, "FAIL", "no-focus-replacement",
                                    "`outline: none` with no `:focus`/`:focus-visible` rule "
-                                   "anywhere — the keyboard loses the cursor"))
+                                   "anywhere — the keyboard loses the cursor", body_col))
             elif focus_kind == "focus":
                 out.append(Finding(str(path), body_line, "TELL", "focus-not-visible",
                                    "`outline: none` replaced on `:focus` only — works, but "
-                                   "mouse clicks flash the ring too; prefer `:focus-visible`"))
+                                   "mouse clicks flash the ring too; prefer `:focus-visible`",
+                                   body_col))
 
         # Real pages rarely write a bare `height: 100vh`; they write
         # `min-height: calc(100vh - 4rem)` so a sticky header fits. Matching the
         # whole value keeps the same bug visible in the form people actually use.
         for decl in HEIGHT_DECL.finditer(body):
             if re.search(r"\b100vh\b", decl.group(2), re.I):
-                out.append(Finding(str(path), _line_at(css, rule.start(2) + decl.start(), line),
+                vh_line, vh_col = _loc(css, rule.start(2) + decl.start(), line)
+                out.append(Finding(str(path), vh_line,
                                    "FAIL", "viewport-vh",
                                    "`100vh` (including inside calc()) breaks under mobile "
-                                   "browser chrome — use `100dvh`"))
+                                   "browser chrome — use `100dvh`", vh_col))
 
         if re.search(r"\boverflow-x\s*:\s*hidden\b", body, re.I) and re.search(
             r"^(?:html|body)\b|,\s*(?:html|body)\b", selector, re.I):
             out.append(Finding(str(path), body_line, "FAIL", "hidden-overflow",
                                "`overflow-x: hidden` on html/body masks a real horizontal "
-                               "overflow — fix the offending element instead"))
+                               "overflow — fix the offending element instead", body_col))
 
         if not theme:
             for decl in body.split(";"):
@@ -151,12 +177,13 @@ def check_css(path: Path, line: int, css: str, focus_kind: str) -> list[Finding]
                     snippet = decl.strip().replace("\n", " ")[:60]
                     out.append(Finding(str(path), body_line, "TELL", "literal-color",
                                        f"literal colour outside the token block (`{color.group(0)}`) — "
-                                       f"add a role token and use var(); near: {snippet!r}"))
+                                       f"add a role token and use var(); near: {snippet!r}",
+                                       body_col))
             if "uppercase" in body.lower() and re.search(r"letter-spacing\s*:\s*[0-9.]+em",
                                                          body, re.I):
                 out.append(Finding(str(path), body_line, "TELL", "eyebrow",
                                    "tracked-out ALL-CAPS label — the eyebrow tell; labels are "
-                                   "body face, sentence case, untracked"))
+                                   "body face, sentence case, untracked", body_col))
     return out
 
 
@@ -193,14 +220,17 @@ def check_html(path: Path, text: str) -> list[Finding]:
         if limit and float(limit.group(1)) < 5:
             blocked = True
         if blocked:
-            out.append(Finding(str(path), _line_at(text, tag.start(), 1), "FAIL", "zoom-lock",
+            zoom_line, zoom_col = _loc(text, tag.start(), 1)
+            out.append(Finding(str(path), zoom_line, "FAIL", "zoom-lock",
                                "viewport disables pinch-zoom (`user-scalable=no` or a low "
-                               "`maximum-scale`) — WCAG 1.4.4 needs 200%; drop it"))
+                               "`maximum-scale`) — WCAG 1.4.4 needs 200%; drop it", zoom_col))
     for match in IMG_TAG.finditer(text):
         tag = match.group(0)
         if not re.search(r"\balt\s*=", tag, re.I):
-            out.append(Finding(str(path), _line_at(text, match.start(), 1), "FAIL", "img-alt",
-                               "`<img>` without `alt` — set `alt=\"\"` only for decorative images"))
+            img_line, img_col = _loc(text, match.start(), 1)
+            out.append(Finding(str(path), img_line, "FAIL", "img-alt",
+                               "`<img>` without `alt` — set `alt=\"\"` only for decorative images",
+                               img_col))
     return out
 
 

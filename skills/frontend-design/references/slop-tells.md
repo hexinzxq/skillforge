@@ -44,6 +44,10 @@ file is missing (and that no `<base>` redirects) is not a note: it is the
 in the files I could read", not "the page is fine". Read the skipped sheet
 yourself against the tables above.
 
+Findings point at `file:line`; on a minified line (over 400 characters) they
+gain a column (`file:1:48213`) because a static export is one line and the
+`near:` snippet alone may match the file more than once.
+
 ## Waiving a tell
 
 Fix it, or waive it **on the record**: one line in the handoff saying which

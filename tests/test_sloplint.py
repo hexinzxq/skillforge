@@ -324,10 +324,23 @@ class RuleTests(unittest.TestCase):
             ".card { background: color-mix(in oklab, var(--accent) 20%, transparent); }")
         self.assertNotIn("literal-color", out)
 
-
+    def test_token_declarations_may_hold_literals(self):
         code, out = self.scan_css(":root { --bg: #fafafa; } .card { background: var(--bg); }")
         self.assertEqual(code, 0)
         self.assertNotIn("literal-color", out)
+
+    def test_a_minified_line_gets_a_column(self):
+        # A static export is one 100KB line: "line 1" locates nothing, and the
+        # near: snippet can match the same declaration twice.
+        css = ".a{color:#111}" + ".b{color:#222}" * 120 + ".c{background:#fff}"
+        self.assertGreater(len(css), 400)
+        code, out = self.scan_css(css)
+        self.assertEqual(code, 0, out)
+        self.assertRegex(out, r":1:\d+\s+TELL  literal-color")
+
+    def test_a_readable_line_has_no_column(self):
+        code, out = self.scan_css(".card { background: #ffffff; }")
+        self.assertIn(":1  TELL  literal-color", out)
 
     def test_strict_turns_tells_into_failure(self):
         with tempfile.NamedTemporaryFile("w", suffix=".css", delete=False) as handle:
