@@ -158,3 +158,6 @@
   改法：新增 `--exclude GLOB`（可重复，`fnmatch` 对绝对路径和原样路径都匹配），命中的文件不进扫描队列；跳过了什么必须说出来——`note: N file(s) not scanned (--exclude): …`，跟 linked stylesheet 的 note 一个规矩：静默跳过是错的，说出来才算。
   验证：新增 1 个用例（内生临时目录 `next/a.css` + 页面 link 过去：不排除 → exit 1；`--exclude '*/next/*'` → exit 0 且输出 note），139 个测试全过。slop-tells.md 的 Coverage 段加了一段「vendored 就排除你自己改不了的那个，不要静音你该修的」。
   自查发现：我三次用「锚点行 + 前置插入」的方式改测试文件，实际都写成了替换锚点行，把上一个用例的 `def` 吃掉了（症状是测试总数不涨、代码悬空）。这次恢复后 139 个用例；以后插入一律 `add + anchor`。
+- **18:44 有 transition/animation 的样式表，从来不问「系统要求减少动态」怎么办** — 真实输入：dsh-daily-lab/amem/web/style.css 里 toast 的 `opacity: 0; transition: opacity .2s`，整份文件没有 `prefers-reduced-motion`；同一天扫自己的博客发现 blog/assets/styles.css 用 `@media (prefers-reduced-motion: no-preference)` 把入场动画包起来——那才是标准写法，而工具对两者一视同仁、一句话不说。sloplint 只在 `animate-geometry` 那层管「动画了什么属性」，不管「用户要求别动」。
+  改法：check_css 末尾做文件级判定——`MOTION_DECL`（`transition:` / `animation:`，排除 `-webkit-` 前缀）命中且全文没有 `prefers-reduced-motion` → TELL `no-reduced-motion`。`reduce` 和 `no-preference` 两种写法都算数（后者更好，动画默认关闭）；150ms 颜色渐变属于可记录的 waive。
+  验证：新增 3 个用例（只有 transition → 有 tell；`no-preference` 包裹 / `reduce` 里 transition:none 两种都能压住；没有动画的文件不报），142 个测试全过；真实文件 dsh-daily-lab/amem/web/style.css:103 报出该 tell，博客两页不受影响。

@@ -30,6 +30,7 @@ the skill.
 | `literal-color` | hex/rgb/hsl/oklch/lab/lch/`color()` literal outside a token declaration (a `color-mix()` built from tokens is fine) | components should reference roles, so a theme swap stays possible |
 | `eyebrow` | `text-transform: uppercase` + `letter-spacing` in one rule | tracked-out ALL-CAPS labels above every section are the generated look |
 | `focus-not-visible` | `outline: none` replaced on `:focus` only | works, but every mouse click flashes the ring — `:focus-visible` shows it only for keyboard use |
+| `no-reduced-motion` | a file that declares `transition`/`animation` and never mentions `prefers-reduced-motion` | an entrance animation or parallax that ignores the OS setting; either form counts (`reduce` or `no-preference`), and a 150ms colour fade is a legitimate waive |
 
 `--strict` makes TELLs fail too — use it on a project that has already
 committed to a token layer, where a literal colour is a real defect. It also

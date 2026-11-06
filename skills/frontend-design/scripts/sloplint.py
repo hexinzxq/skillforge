@@ -107,6 +107,14 @@ def _regions(path: Path, text: str) -> list[tuple[int, str]]:
     return regions
 
 
+# Any transition or animation at all — the file-level question is whether the
+# sheet ever offers a way out of it. A 150ms colour fade is harmless; an
+# entrance animation that ignores the OS setting is not, and only the author
+# knows which of theirs is which.
+MOTION_DECL = re.compile(r"(?<![\w-])(?:transition|animation)\s*:", re.I)
+REDUCED_MOTION = re.compile(r"prefers-reduced-motion", re.I)
+
+
 def _transition_target(part: str) -> str:
     """First token that isn't a time — the animated property, or "" if none."""
     for token in part.strip().lower().split():
@@ -185,6 +193,15 @@ def check_css(path: Path, line: int, css: str, focus_kind: str) -> list[Finding]
                 out.append(Finding(str(path), body_line, "TELL", "eyebrow",
                                    "tracked-out ALL-CAPS label — the eyebrow tell; labels are "
                                    "body face, sentence case, untracked", body_col))
+
+    motion = MOTION_DECL.search(css)
+    if motion and not REDUCED_MOTION.search(css):
+        motion_line, motion_col = _loc(css, motion.start(), line)
+        out.append(Finding(str(path), motion_line, "TELL", "no-reduced-motion",
+                           "`transition`/`animation` with no "
+                           "`@media (prefers-reduced-motion: reduce)` in this file — "
+                           "motion that ignores the OS setting; add the query and "
+                           "drop the movement inside it", motion_col))
     return out
 
 

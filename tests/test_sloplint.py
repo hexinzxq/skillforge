@@ -345,6 +345,27 @@ class RuleTests(unittest.TestCase):
             self.assertEqual(code, 0, out)
             self.assertIn("not scanned (--exclude)", out)
 
+    def test_motion_without_a_reduced_motion_query_is_a_tell(self):
+        code, out = self.scan_css(".toast { opacity: 0; transition: opacity .2s; }")
+        self.assertEqual(code, 0, out)
+        self.assertIn("no-reduced-motion", out)
+
+    def test_a_reduced_motion_query_settles_the_rule(self):
+        # `no-preference` is the better idiom: motion is opt-in. Either form
+        # must silence the rule.
+        css = ("@media (prefers-reduced-motion: no-preference) {"
+               " .enter { animation: enter .3s forwards } }")
+        code, out = self.scan_css(css)
+        self.assertNotIn("no-reduced-motion", out)
+        css = ("@media (prefers-reduced-motion: reduce) { .x { transition: none } }"
+               " .toast { transition: opacity .2s }")
+        code, out = self.scan_css(css)
+        self.assertNotIn("no-reduced-motion", out)
+
+    def test_a_quiet_sheet_gets_no_motion_tell(self):
+        code, out = self.scan_css(".card { color: #111 }")
+        self.assertNotIn("no-reduced-motion", out)
+
     def test_a_minified_line_gets_a_column(self):
         # A static export is one 100KB line: "line 1" locates nothing, and the
         # near: snippet can match the same declaration twice.
