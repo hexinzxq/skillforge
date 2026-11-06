@@ -111,6 +111,11 @@ def _regions(path: Path, text: str) -> list[tuple[int, str]]:
 # sheet ever offers a way out of it. A 150ms colour fade is harmless; an
 # entrance animation that ignores the OS setting is not, and only the author
 # knows which of theirs is which.
+# `width: 100vw` counts the vertical scrollbar; a bare full-width block then
+# scrolls sideways by ~15px on any page taller than the viewport. `calc(100vw -
+# 24px)` is a deliberate gutter and is fine.
+WIDTH_DECL = re.compile(r"(?:^|;)\s*((?:min-|max-)?width)\s*:\s*([^;{}]+)", re.I)
+
 MOTION_DECL = re.compile(r"(?<![\w-])(?:transition|animation)\s*:", re.I)
 REDUCED_MOTION = re.compile(r"prefers-reduced-motion", re.I)
 
@@ -134,7 +139,9 @@ def check_css(path: Path, line: int, css: str, focus_kind: str) -> list[Finding]
 
         for decl in TRANSITION_DECL.finditer(body):
             value = decl.group(2).strip().rstrip(";")
-            line_no, col = _loc(css, rule.start(2) + decl.start(), line)
+            # decl.start() lands on the `;` that ends the previous declaration,
+            # one line up; the property name is the real position.
+            line_no, col = _loc(css, rule.start(2) + decl.start(1), line)
             targets = [_transition_target(part) for part in value.split(",")]
             if "all" in targets:
                 out.append(Finding(str(path), line_no, "FAIL", "transition-all",
@@ -163,7 +170,7 @@ def check_css(path: Path, line: int, css: str, focus_kind: str) -> list[Finding]
         # whole value keeps the same bug visible in the form people actually use.
         for decl in HEIGHT_DECL.finditer(body):
             if re.search(r"\b100vh\b", decl.group(2), re.I):
-                vh_line, vh_col = _loc(css, rule.start(2) + decl.start(), line)
+                vh_line, vh_col = _loc(css, rule.start(2) + decl.start(1), line)
                 out.append(Finding(str(path), vh_line,
                                    "FAIL", "viewport-vh",
                                    "`100vh` (including inside calc()) breaks under mobile "
@@ -193,6 +200,14 @@ def check_css(path: Path, line: int, css: str, focus_kind: str) -> list[Finding]
                 out.append(Finding(str(path), body_line, "TELL", "eyebrow",
                                    "tracked-out ALL-CAPS label — the eyebrow tell; labels are "
                                    "body face, sentence case, untracked", body_col))
+
+        for decl in WIDTH_DECL.finditer(body):
+            if re.fullmatch(r"100vw\s*(?:!important)?", decl.group(2).strip(), re.I):
+                vw_line, vw_col = _loc(css, rule.start(2) + decl.start(1), line)
+                out.append(Finding(str(path), vw_line, "TELL", "viewport-vw",
+                                   "`width: 100vw` includes the scrollbar — a full-width "
+                                   "block scrolls sideways by its width; use `100%` on a "
+                                   "full-bleed section", vw_col))
 
     motion = MOTION_DECL.search(css)
     if motion and not REDUCED_MOTION.search(css):

@@ -366,6 +366,20 @@ class RuleTests(unittest.TestCase):
         code, out = self.scan_css(".card { color: #111 }")
         self.assertNotIn("no-reduced-motion", out)
 
+    def test_a_bare_100vw_is_a_tell_but_a_calc_gutter_is_not(self):
+        code, out = self.scan_css(".shell { width: 100vw; height: 40px }")
+        self.assertEqual(code, 0, out)
+        self.assertIn("viewport-vw", out)
+        code, out = self.scan_css(".toolbar { max-width: calc(100vw - 24px); }")
+        self.assertNotIn("viewport-vw", out)
+
+    def test_a_multiline_rule_reports_the_declaration_line(self):
+        css = ".hero {\n  color: #fff;\n  transition: all .2s;\n}\n"
+        code, out = self.scan_css(css)
+        self.assertEqual(code, 1, out)
+        self.assertIn(":3  FAIL  transition-all", out)
+        self.assertNotIn(":2  FAIL  transition-all", out)
+
     def test_a_minified_line_gets_a_column(self):
         # A static export is one 100KB line: "line 1" locates nothing, and the
         # near: snippet can match the same declaration twice.
