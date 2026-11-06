@@ -48,6 +48,12 @@ Findings point at `file:line`; on a minified line (over 400 characters) they
 gain a column (`file:1:48213`) because a static export is one line and the
 `near:` snippet alone may match the file more than once.
 
+Vendored bundles are real code you still cannot edit — `_next/` CSS, a
+`*.min.css` dependency. `--exclude '*/_next/*'` (repeatable) keeps them out of
+the scan, and the run then names what it skipped: `note: 1 file(s) not scanned
+(--exclude): …`. Exclude the file you cannot fix; do not silence a finding you
+can.
+
 ## Waiving a tell
 
 Fix it, or waive it **on the record**: one line in the handoff saying which

@@ -154,3 +154,7 @@
   改法：`Finding` 增加可选 `col`，`render()` 输出 `file:line:col`；新增 `MINIFIED_LINE = 400` 与 `_loc(text, pos, base_line)`——只有当该行长度超过 400 才返回列号（普通可读文件的行号已经够定位，不制造噪音）。check_css 的每个规则级 finding 用 `body_col`、每条声明用 `_loc` 精确位置；check_html 的 zoom-lock / img-alt 同理。文档在 slop-tells.md 的 Coverage 段补了一句。
   验证：实测现在输出 `faf81e09ecf69405.css:1:329  TELL  literal-color`；新增 2 个用例（>400 字符单行必须有 `:1:\d+`、短行必须仍是 `:1  `），顺手恢复了一个早前被我误删 def 的悬空测试，138 个测试全过。
   顺手记下：同一文件在 HEAD 上也有 5 条 viewport-vh FAIL（Tailwind 的 `.h-screen{height:100vh}`），是真实的但属于第三方 vendored 产物，改不了——「压缩/第三方 CSS 要不要降噪」还没定，先不动。
+- **13:36 压缩过的第三方 bundle 没法改，工具却不给排除手段** — 承接 12:47 那条：解析根相对 href 之后，扫 next 导出会连 `_next/static/css/*.css`（压缩、vendored、`100vh` 是 Tailwind 写的）一起扫出 5 条 FAIL。真实判断是「这几条改不了，只能排除」，但 sloplint 只有路径参数，没有排除能力——用户要么整页不扫，要么看着永远红的输出。
+  改法：新增 `--exclude GLOB`（可重复，`fnmatch` 对绝对路径和原样路径都匹配），命中的文件不进扫描队列；跳过了什么必须说出来——`note: N file(s) not scanned (--exclude): …`，跟 linked stylesheet 的 note 一个规矩：静默跳过是错的，说出来才算。
+  验证：新增 1 个用例（内生临时目录 `next/a.css` + 页面 link 过去：不排除 → exit 1；`--exclude '*/next/*'` → exit 0 且输出 note），139 个测试全过。slop-tells.md 的 Coverage 段加了一段「vendored 就排除你自己改不了的那个，不要静音你该修的」。
+  自查发现：我三次用「锚点行 + 前置插入」的方式改测试文件，实际都写成了替换锚点行，把上一个用例的 `def` 吃掉了（症状是测试总数不涨、代码悬空）。这次恢复后 139 个用例；以后插入一律 `add + anchor`。

@@ -329,6 +329,22 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertNotIn("literal-color", out)
 
+    def test_exclude_skips_a_vendored_bundle_and_says_so(self):
+        import tempfile as tf
+        with tf.TemporaryDirectory() as root:
+            vendor = Path(root, "next")
+            vendor.mkdir()
+            (vendor / "a.css").write_text(".a{height:100vh}\n")
+            page = Path(root, "p.html")
+            page.write_text('<!doctype html><html><head><meta name="viewport" '
+                            'content="width=device-width"><link rel="stylesheet" '
+                            'href="next/a.css"></head><body></body></html>\n')
+            code, out = run(str(page))
+            self.assertEqual(code, 1, out)          # the vendored file is scanned
+            code, out = run("--exclude", "*/next/*", str(page))
+            self.assertEqual(code, 0, out)
+            self.assertIn("not scanned (--exclude)", out)
+
     def test_a_minified_line_gets_a_column(self):
         # A static export is one 100KB line: "line 1" locates nothing, and the
         # near: snippet can match the same declaration twice.

@@ -16,6 +16,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import re
 import sys
 from pathlib import Path
@@ -359,6 +360,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--strict", action="store_true",
                    help="treat TELL findings as failures too")
     p.add_argument("--quiet", action="store_true", help="only print failures and the summary")
+    p.add_argument("--exclude", action="append", default=[], metavar="GLOB",
+                   help="skip files whose path matches this glob (repeatable), "
+                        "e.g. '*/_next/*' for a vendored bundle")
     args = p.parse_args(argv)
 
     findings: list[Finding] = []
@@ -367,14 +371,30 @@ def main(argv: list[str] | None = None) -> int:
     sources: list[tuple[Path, str]] = []
     queue: list[Path] = []
     skipped_stylesheets: list[str] = []
+    excluded: list[str] = []
+
+    def keep(candidate: Path) -> bool:
+        """--exclude is for the files you cannot fix: a vendored or minified
+        bundle. Skipping is still reported, never silent."""
+        if not args.exclude:
+            return True
+        target = str(candidate.resolve())
+        for pattern in args.exclude:
+            if fnmatch.fnmatch(target, pattern) or fnmatch.fnmatch(str(candidate), pattern):
+                if target not in excluded:
+                    excluded.append(target)
+                return False
+        return True
+
     for raw in args.paths:
         path = Path(raw).expanduser()
         if not path.is_file():
             print(f"error: no such file: {raw}", file=sys.stderr)
             return 2
-        queue.append(path)
+        if keep(path):
+            queue.append(path)
         found, unresolved = linked_stylesheets(path)
-        queue.extend(found)
+        queue.extend(item for item in found if keep(item))
         for line, href, why in unresolved:
             if why == "missing":
                 findings.append(Finding(str(path), line, "FAIL", "missing-stylesheet",
@@ -424,6 +444,12 @@ def main(argv: list[str] | None = None) -> int:
         if args.quiet and finding.severity == "TELL" and not args.strict:
             continue
         print(finding.render())
+
+    if excluded:
+        shown = ", ".join(excluded[:4])
+        if len(excluded) > 4:
+            shown += f", … (+{len(excluded) - 4} more)"
+        print(f"\nnote: {len(excluded)} file(s) not scanned (--exclude): {shown}", file=sys.stderr)
 
     if skipped_stylesheets:
         shown = ", ".join(skipped_stylesheets[:4])
