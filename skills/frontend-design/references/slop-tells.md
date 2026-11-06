@@ -20,7 +20,7 @@ the skill.
 | `img-alt` | `<img>` without `alt` | screen readers announce the filename; `alt=""` only when decorative |
 | `no-viewport` | a full document (`<!doctype`/`<html>`) with no `<meta name="viewport">` | phones lay it out at 980px and shrink it; fragments/partials are exempt; a print target (`@page`) gets a tell instead of a failure — the PDF has no viewport, only a screen copy would need one |
 | `zoom-lock` | viewport with `user-scalable=no` or `maximum-scale` below 5 | pinch-zoom is an accessibility feature (WCAG 1.4.4); low-vision users cannot read a page that forbids it |
-| `missing-stylesheet` | a relative `<link rel="stylesheet">` whose file does not exist | the page ships unstyled — a renamed or typo'd path renders exactly like a design decision; root-relative and CDN hrefs are listed in a note instead (they cannot be resolved from disk) |
+| `missing-stylesheet` | a relative `<link rel="stylesheet">` whose file does not exist | the page ships unstyled — a renamed or typo'd path renders exactly like a design decision; a root-relative href is looked up under the page's ancestors (export root), and only CDN or `<base>`-relative hrefs fall back to a note |
 | `dangling-var` | `var(--x)` is one or two edits from a token declared in this scan, and has no fallback | it is a typo — the reference resolves to nothing and the element renders with no colour |
 
 ## TELL — the default a model falls into, waivable on the record (exit 0)
@@ -35,9 +35,10 @@ the skill.
 committed to a token layer, where a literal colour is a real defect. It also
 overrides `--quiet` for tells: a run that exits 1 must print why.
 
-Coverage: a page that links a stylesheet sloplint cannot open from disk — a
-root-relative `/_next/static/css/...` href, a CDN sheet, or a relative href on
-a page with `<base href>` — gets a `note:` line naming it. A relative href whose
+Coverage: a root-relative href (`/_next/static/css/...`) is resolved against
+the page's ancestors — a static export puts it under the export root, so it
+gets linted. What is left over — a CDN sheet, or a relative href on a page
+with `<base href>` — gets a `note:` line naming it. A relative href whose
 file is missing (and that no `<base>` redirects) is not a note: it is the
 `missing-stylesheet` failure above. Zero findings then means "nothing wrong
 in the files I could read", not "the page is fine". Read the skipped sheet

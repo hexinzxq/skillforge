@@ -217,6 +217,37 @@ class RuleTests(unittest.TestCase):
         self.assertIn("no-viewport", out)
         self.assertIn("print-target", out)
 
+    def test_a_root_relative_stylesheet_is_resolved_on_disk(self):
+        # A static export writes `/_next/static/css/x.css` at the export root;
+        # walking the page's ancestors finds it, so the CSS is actually linted
+        # instead of the page passing while every rule in it went unscanned.
+        with tempfile.TemporaryDirectory() as root:
+            export = Path(root) / "out"
+            (export / "_next" / "static" / "css").mkdir(parents=True)
+            (export / "_next" / "static" / "css" / "app.css").write_text(
+                ".card { background: #ffffff; }")
+            page = export / "index.html"
+            page.write_text('<!doctype html><html><head><meta name="viewport" '
+                            'content="width=device-width, initial-scale=1">'
+                            '<link rel="stylesheet" href="/_next/static/css/app.css">'
+                            '</head><body></body></html>')
+            code, out = run(str(page))
+            self.assertEqual(code, 0, out)   # literal-color is a tell
+            self.assertIn("app.css", out)
+            self.assertIn("literal-color", out)
+            self.assertNotIn("not scanned", out)
+
+    def test_a_root_relative_stylesheet_with_no_export_root_is_a_note(self):
+        with tempfile.TemporaryDirectory() as root:
+            page = Path(root) / "index.html"
+            page.write_text('<!doctype html><html><head><meta name="viewport" '
+                            'content="width=device-width, initial-scale=1">'
+                            '<link rel="stylesheet" href="/nowhere/at/all.css">'
+                            '</head><body></body></html>')
+            code, out = run(str(page))
+            self.assertEqual(code, 0, out)
+            self.assertIn("not scanned", out)
+
     def test_full_page_without_viewport_fails(self):
         code, out = self.scan_html(
             '<!doctype html><html lang="en"><head><title>t</title></head>'

@@ -259,7 +259,20 @@ def linked_stylesheets(path: Path) -> tuple[list[Path], list[tuple[int, str, str
             unresolved.append((line, href, "remote"))
             continue
         if href.startswith("/"):
-            unresolved.append((line, href, "root-relative"))
+            # A root-relative href is resolvable on disk: a static export puts
+            # `/_next/static/css/x.css` at `<export root>/_next/...`, and the
+            # page sits somewhere under that root. Walk the page's ancestors
+            # and take the first one where the path exists — otherwise a built
+            # site looks clean while every rule in it went unscanned.
+            target = href.split("?")[0].split("#")[0].lstrip("/")
+            for ancestor in (path.parent, *path.parent.parents):
+                candidate = (ancestor / target).resolve()
+                if candidate.is_file():
+                    if candidate not in found:
+                        found.append(candidate)
+                    break
+            else:
+                unresolved.append((line, href, "root-relative"))
             continue
         if has_base:
             unresolved.append((line, href, "base-href"))
