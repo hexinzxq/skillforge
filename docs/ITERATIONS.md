@@ -176,3 +176,7 @@
 - **18:41 一整页只有 h2 的文档，工具一句不说** — 真实输入：dsh-daily-lab/amem/web/index.html（会话浏览器的真页面）里唯一的标题是 `<h2>会话</h2>`，页头 logo 是一个 `<div class="logo">`——线性读屏从头到尾不会念出这一页是什么，大纲也没有根；sloplint 有 no-viewport / zoom-lock / img-alt，却从没管过标题层级。
   改法：新增 `H1_TAG = re.compile(r"<h1\b", re.I)`、`H2_UP = re.compile(r"<h[2-6]\b", re.I)`；`check_html` 末尾做文档级判定——完整文档（FULL_DOC 命中）有 h2–h6 没有一个 h1 → TELL `no-h1`（WCAG 没强制 h1，是 best practice，所以只 tell 不 fail）；片段/模板与「连标题都没有的极简页」都不报，避免把空的占位页也判了。
   验证：新增 3 个用例（只有 h2 的完整文档 → 有 tell 但不 fail；h1 + h2 的正常页 → 无 tell；没有 doctype 的片段 → 不报），150 个测试全过；真页面复跑多出该 tell，博客三页与 resume.html 都不受影响。
+
+- **21:44 调色板藏在页面里，对比度脚本读不到** — 真实输入：今天刚起的 worktree-board 把 token 写在 `src/worktree_board/static/index.html` 的内联 `<style>` 里（静态导出/单文件工具的常见形态），`contrast.py --css` 只收 .css，于是我手动 `split("<style>")` 出到 /tmp/wb.css 才能验——这一步谁都懒得做第二次，检查就停了。
+  改法：新增 `STYLE_BLOCK = re.compile(r"<style\b[^>]*>(.*?)</style>", re.I | re.S)` 与 `sheet_text(path)`——后缀 .html/.htm 时把全部 `<style>` 块拼起来再喂给 `read_tokens`，没有 style 块则 `ValueError`（exit 2，说清是缺 style 不是缺颜色），其它文件原样读；`--css` 的 help 与 SKILL.md / contrast-checking.md 各加一行。
+  验证：直接 `python3 scripts/contrast.py --css ../worktree-board/src/worktree_board/static/index.html` 跑通（text on panel 14.64 / muted on panel-2 6.46 PASS，line 三行 1.24–1.47 advisory）；新增 2 个用例（内联 style 的页面 exit 0 且出 `text on bg`；只有 doctype 的页面 exit 2 且提示 `no inline <style> block`），152 个测试全过。

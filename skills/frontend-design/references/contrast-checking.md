@@ -7,6 +7,7 @@ than plain `--css tokens.css`, or when the sheet uses names you don't recognize.
 
 ```bash
 python3 scripts/contrast.py --css tokens.css        # derive pairs from naming conventions
+python3 scripts/contrast.py --css page.html         # tokens in an inline <style> block
 python3 scripts/contrast.py --fg "#111" --bg "#fafafa" --min 4.5
 python3 scripts/contrast.py --pair "text:oklch(0.145 0 0) on bg:oklch(1 0 0)"
 python3 scripts/contrast.py --css sheet.css --block .dark --quiet

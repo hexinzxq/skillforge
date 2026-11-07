@@ -35,6 +35,23 @@ HEX_RE = re.compile(r"^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
 FUNC_RE = re.compile(r"^(rgba?|hsla?|oklch|oklab)\(([^)]*)\)$", re.I)
 VAR_RE = re.compile(r"--([a-zA-Z0-9-]+)\s*:\s*([^;]+);")
 WCAG_TEXT, WCAG_LARGE, WCAG_UI = 4.5, 3.0, 3.0
+STYLE_BLOCK = re.compile(r"<style\b[^>]*>(.*?)</style>", re.I | re.S)
+
+
+def sheet_text(path: Path) -> str:
+    """The CSS to read: a stylesheet as-is, or the <style> blocks of a page.
+
+    A palette often lives in the page itself (a static export, a single-file
+    tool). Making the user copy it into a .css file first is how the check
+    stops happening, so an .html path is read for its inline style blocks.
+    """
+    text = path.read_text(encoding="utf-8")
+    if path.suffix.lower() not in (".html", ".htm"):
+        return text
+    blocks = [match.group(1) for match in STYLE_BLOCK.finditer(text)]
+    if not blocks:
+        raise ValueError(f"{path}: no inline <style> block to read tokens from")
+    return "\n".join(blocks)
 
 
 def _angle(token: str) -> float:
@@ -703,7 +720,8 @@ def main(argv: list[str]) -> int:
     p.add_argument("--bg", help="background color")
     p.add_argument("--pair", action="append", default=[], metavar="'role:#hex on role:#hex'")
     p.add_argument("--css", action="append", default=[], metavar="FILE",
-                   help="token sheet to read custom properties from")
+                   help="token sheet to read custom properties from; an .html page "
+                        "is read for its inline <style> blocks")
     p.add_argument("--block", metavar="SELECTOR",
                    help="when the sheet defines tokens in several blocks "
                         "(:root plus .dark), pick one by selector substring")
@@ -728,7 +746,7 @@ def main(argv: list[str]) -> int:
             print("error: --all-blocks checks every block; drop --block", file=sys.stderr)
             return 2
         for path in args.css:
-            css_text = Path(path).expanduser().read_text(encoding="utf-8")
+            css_text = sheet_text(Path(path).expanduser())
             if args.all_blocks:
                 merged: dict[str, dict[str, str]] = {}
                 for selector, scope in _scopes(css_text):

@@ -107,7 +107,7 @@ Rules that prevent 90% of bad palettes:
 how a palette ships at 3.9:1:
 
 ```bash
-python3 scripts/contrast.py --css tokens.css   # exits 1 on any failure
+python3 scripts/contrast.py --css tokens.css   # exits 1 on any failure (.html reads its <style>)
 ```
 
 The naming conventions above become the test: the script derives the pairs, so

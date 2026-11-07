@@ -525,6 +525,35 @@ class ThemeSplitTests(unittest.TestCase):
         finally:
             Path(path).unlink()
 
+    def test_tokens_inside_a_page_are_read(self):
+        # A single-file tool or a static export keeps its palette in an inline
+        # <style>. Copying it into a .css file first is how the check stops
+        # happening; an .html path is read for those blocks directly.
+        page = """<!doctype html><html lang="zh-CN"><head>
+        <style>:root { --bg: #0f1216; --text: #e6edf3; --muted: #9aa7b4; }</style>
+        </head><body><p>hi</p></body></html>"""
+        with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False) as handle:
+            handle.write(page)
+            path = handle.name
+        try:
+            code, out = run("--css", path)
+            self.assertEqual(code, 0)
+            self.assertIn("text on bg", out)
+            self.assertIn("PASS", out)
+        finally:
+            Path(path).unlink()
+
+    def test_a_page_without_a_style_block_says_so(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False) as handle:
+            handle.write("<!doctype html><html lang=en><body><p>hi</p></body></html>")
+            path = handle.name
+        try:
+            code, out = run("--css", path)
+            self.assertEqual(code, 2)
+            self.assertIn("no inline <style> block", out)
+        finally:
+            Path(path).unlink()
+
     def test_the_same_palette_in_two_sheets_is_printed_once(self):
         # Splitting tokens.css from a subpage sheet is normal, and both halves
         # redeclare text/bg so the subpage works standalone. Same pair, same
