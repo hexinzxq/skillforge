@@ -366,6 +366,12 @@ class RuleTests(unittest.TestCase):
         code, out = self.scan_css(".card { color: #111 }")
         self.assertNotIn("no-reduced-motion", out)
 
+    def test_a_literal_points_at_its_own_declaration(self):
+        css = ".card {\n  display: grid;\n  color: #eeeeee;\n}\n"
+        code, out = self.scan_css(css)
+        self.assertIn(":3  TELL  literal-color", out)
+        self.assertNotIn(":1  TELL  literal-color", out)
+
     def test_a_bare_100vw_is_a_tell_but_a_calc_gutter_is_not(self):
         code, out = self.scan_css(".shell { width: 100vw; height: 40px }")
         self.assertEqual(code, 0, out)

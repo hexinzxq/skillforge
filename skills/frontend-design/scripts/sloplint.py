@@ -183,18 +183,25 @@ def check_css(path: Path, line: int, css: str, focus_kind: str) -> list[Finding]
                                "overflow — fix the offending element instead", body_col))
 
         if not theme:
-            for decl in body.split(";"):
+            for decl_match in re.finditer(r"[^;]+", body):
+                decl = decl_match.group(0)
                 if re.match(r"\s*--[\w-]+\s*:", decl):  # token declaration: literals belong here
                     continue
                 # A literal inside var(--x, #fff) is a deliberate fallback, not a
                 # component hard-coding a colour.
-                decl = re.sub(r"var\([^)]*\)", "var()", decl)
+                fallbacks = [m.span() for m in re.finditer(r"var\([^)]*\)", decl)]
                 for color in COLOR_LITERAL.finditer(decl):
+                    if any(start <= color.start() < end for start, end in fallbacks):
+                        continue
+                    # Point at the declaration, not the rule: in a minified sheet
+                    # every literal used to land on the rule's own column.
+                    lit_line, lit_col = _loc(css, rule.start(2) + decl_match.start()
+                                              + color.start(), line)
                     snippet = decl.strip().replace("\n", " ")[:60]
-                    out.append(Finding(str(path), body_line, "TELL", "literal-color",
+                    out.append(Finding(str(path), lit_line, "TELL", "literal-color",
                                        f"literal colour outside the token block (`{color.group(0)}`) — "
                                        f"add a role token and use var(); near: {snippet!r}",
-                                       body_col))
+                                       lit_col))
             if "uppercase" in body.lower() and re.search(r"letter-spacing\s*:\s*[0-9.]+em",
                                                          body, re.I):
                 out.append(Finding(str(path), body_line, "TELL", "eyebrow",

@@ -164,3 +164,6 @@
 - **21:41 `width: 100vw` 从来没人管，顺手还抓到行号差一行** — 真实输入：/Users/xin/Documents/Codex/2026-05-03/new-chat/src/app/globals.css 的 `.capture-shell{width:100vw}` 与 `.selection-canvas{width:100vw}`。`100vw` 把纵向滚动条宽度也算进去，满宽块在页面比视口高时横向滚一条；sloplint 有 viewport-vh（100vh）却没有对应的 100vw。做着做着发现更严重的问题：规则用 `(?:^|;)\s*(height|width)...` 找声明，`decl.start()` 落在「上一条声明的分号」上——多行规则里报出来的行号永远比真实少一行（真文件上 278 报成 277、285 报成 284）。HEIGHT_DECL、TRANSITION_DECL 都中了这个。
   改法：新增 `WIDTH_DECL`，只对「裸 100vw」（值恰好是 `100vw`，可带 !important）报 TELL `viewport-vw`，`calc(100vw - 24px)` 这种预留边距的写法不报；所有声明位置改用 `decl.start(1)`（属性名的位置）算 line/col，transition-all、viewport-vh、viewport-vw 一起修。
   验证：新增 2 个用例（裸 100vw → tell；calc 不报；多行规则必须报第 3 行而不是第 2 行），144 个测试全过；真文件复跑行号与源码逐行对齐（58/65/254/275/278/283/285），两份 100vw 报成 TELL viewport-vw。
+- **08:07 literal-colour 报的是整条规则的行，不是那条声明** — 真实输入：blog/assets/post.css 的 `.post-body code{...}` 三行规则里 `color:#fff` 在第二行，sloplint 报第一行（规则选择器行）；压缩后的 `_next` CSS 更糟，25 条 literal-color 全挤在同一个列上（`body_col` 是规则起点），`near:` 又只给 60 字符片段，找起来还是靠猜。
+  改法：`body.split(";")` 换成 `re.finditer(r"[^;]+", body)` 保留每段声明的偏移；命中 literal 时用「规则起点 + 声明起点 + literal 自身偏移」算 line/col，直接指到那个十六进制值。`var(--x, #fff)` 的 fallback 仍按 var span 跳过（原来靠替换成 `var()` 再匹配，偏移会错位，现在改成坐标比对）。
+  验证：新增 1 个用例（三行规则里 second-line 的字面量必须报 :3、不能报 :1），145 个测试全过；真文件 post.css 三条 literal 各自落在 17/32/42 行，与源码逐行一致。
