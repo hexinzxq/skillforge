@@ -351,6 +351,23 @@ class ForegroundConventionTests(unittest.TestCase):
         finally:
             Path(path).unlink()
 
+    def test_a_second_rung_of_the_surface_ladder_is_checked(self):
+        # Sheets ladder their raised surfaces (`--panel-2` for hovers and
+        # toasts). Text on the second rung was never paired, so a low-muted
+        # value there passed silently. This one must fail.
+        css = (":root { --bg: #12151d; --text: #e6e9f0; --muted: #6b7280;"
+               " --panel: #171b25; --panel-2: #1f2430; }")
+        with tempfile.NamedTemporaryFile("w", suffix=".css", delete=False) as handle:
+            handle.write(css)
+            path = handle.name
+        try:
+            code, out = run("--css", path)
+            self.assertEqual(code, 1, out)
+            self.assertIn("muted on panel-2", out)
+            self.assertIn("FAIL", out)
+        finally:
+            Path(path).unlink()
+
     def test_mixed_conventions_coexist(self):
         tokens = {"bg": "#ffffff", "text": "#111111",
                   "accent": "#1d4ed8", "accent-contrast": "#ffffff",

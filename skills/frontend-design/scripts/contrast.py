@@ -574,10 +574,13 @@ def pairs_from_tokens(tokens: dict[str, str]) -> list[tuple[str, str, str, float
     # `surface` is shadcn's name for a raised panel; real sheets also call it
     # `panel` or `card` (one Next.js app checked here does). Text that sits on
     # those panels is as visible as text on the page, so check it too — but
-    # only for the plain text tokens, not for every role.
-    for surface in ("surface", "panel", "card"):
-        if surface not in tokens:
-            continue
+    # only for the plain text tokens, not for every role. Sheets also ladder
+    # them (`--surface-2`, `--panel-2`: cards, hovers, toasts), and text on the
+    # second rung is just as real — a sheet checked here puts `--muted` text on
+    # `--panel-2` hover rows and the pair never appeared in the report.
+    surfaces = [name for name in tokens
+                if re.fullmatch(r"(surface|panel|card)(-\d+)?", name)]
+    for surface in surfaces:
         for name in ("text", "muted"):
             if name in tokens:
                 out.append((f"{name} on {surface}", tokens[name], tokens[surface], WCAG_TEXT))
@@ -621,7 +624,7 @@ def pairs_from_tokens(tokens: dict[str, str]) -> list[tuple[str, str, str, float
     # it. Check each name that conventionally carries a stroke, against the
     # page surface and every raised one — a button sits on a panel, not on bg.
     bases = ["bg"] if "bg" in tokens else (["background"] if "background" in tokens else [])
-    bases += [name for name in ("surface", "panel", "card") if name in tokens]
+    bases += surfaces
     for name in ("border", "line", "divider", "rule"):
         if name not in tokens:
             continue

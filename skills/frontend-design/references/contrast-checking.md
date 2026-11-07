@@ -22,7 +22,7 @@ fix list) · `2` usage/input error.
 | `--<role>-contrast` / `--on-<role>` | against `--<role>` at 4.5:1 |
 | `--<role>-foreground` (shadcn) | against `--<role>` at 4.5:1 |
 | `foreground` on `background` (shadcn) | 4.5:1 |
-| `text` / `muted` against `bg`, and both against `surface` / `panel` / `card` | 4.5:1 |
+| `text` / `muted` against `bg`, and both against every raised surface (`surface` / `panel` / `card` and their `-2` rungs) | 4.5:1 |
 | `ring` / `focus-ring` / `focus` against `bg` (or `background`) | 3:1 — a focus ring is a state indicator, no ambiguity |
 | `border` / `line` / `divider` / `rule` against `bg` and every `surface` / `panel` / `card` | reported against 3:1, **advisory** (see below) |
 
