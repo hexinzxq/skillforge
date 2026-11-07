@@ -615,11 +615,18 @@ def pairs_from_tokens(tokens: dict[str, str]) -> list[tuple[str, str, str, float
             out.append((f"{name} on bg", tokens[name], tokens["bg"], WCAG_UI))
         if name in tokens and "background" in tokens and "bg" not in tokens:
             out.append((f"{name} on background", tokens[name], tokens["background"], WCAG_UI))
-    if "border" in tokens and "bg" in tokens:
-        out.append(("border on bg", tokens["border"], tokens["bg"], WCAG_UI))
-    if "border" in tokens and "background" in tokens and "bg" not in tokens:
-        out.append(("border on background",
-                    tokens["border"], tokens["background"], WCAG_UI))
+    # Dividers and control outlines are not both called `border` in the wild:
+    # one sheet checked here names it `line` (`border: 1px solid var(--line)`
+    # on every button and input) and nothing else in the palette ever reported
+    # it. Check each name that conventionally carries a stroke, against the
+    # page surface and every raised one — a button sits on a panel, not on bg.
+    bases = ["bg"] if "bg" in tokens else (["background"] if "background" in tokens else [])
+    bases += [name for name in ("surface", "panel", "card") if name in tokens]
+    for name in ("border", "line", "divider", "rule"):
+        if name not in tokens:
+            continue
+        for base in bases:
+            out.append((f"{name} on {base}", tokens[name], tokens[base], WCAG_UI))
     return out
 
 
@@ -657,10 +664,11 @@ def hexstr(rgb: tuple[int, int, int]) -> str:
 
 # A `border` token is a control outline in some sheets (shadcn draws inputs
 # with it) and a divider in others (the blog's card rules sit at 1.39:1 on
-# purpose). Static analysis cannot tell them apart, and WCAG 1.4.11 only asks
-# 3:1 of the ones that identify a component — so border rows are reported and
-# never fail the run.
-ADVISORY_ROW = re.compile(r"\bborder on \b")
+# purpose). `line` is the same story under another name — one sheet checked
+# here borders every button and input with it. Static analysis cannot tell
+# them apart, and WCAG 1.4.11 only asks 3:1 of the ones that identify a
+# component — so these rows are reported and never fail the run.
+ADVISORY_ROW = re.compile(r"\b(border|line|divider|rule) on \b")
 
 
 def render(rows: list[tuple[str, tuple[int, int, int], tuple[int, int, int], float]]

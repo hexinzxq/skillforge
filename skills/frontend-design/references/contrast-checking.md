@@ -24,7 +24,7 @@ fix list) · `2` usage/input error.
 | `foreground` on `background` (shadcn) | 4.5:1 |
 | `text` / `muted` against `bg`, and both against `surface` / `panel` / `card` | 4.5:1 |
 | `ring` / `focus-ring` / `focus` against `bg` (or `background`) | 3:1 — a focus ring is a state indicator, no ambiguity |
-| `border` against `bg` | reported against 3:1, **advisory** (see below) |
+| `border` / `line` / `divider` / `rule` against `bg` and every `surface` / `panel` / `card` | reported against 3:1, **advisory** (see below) |
 
 shadcn's `-foreground` convention is honored because it is the most-copied
 sheet on the internet — running it against their real `globals.css` finds real
@@ -36,11 +36,15 @@ is the one thing every shadcn sheet ships broken.
 Border rows are **advisory**: they are printed with their ratio and marked
 `ADVISORY`, and they do not fail the run. `--border` is an input outline in
 shadcn and a card divider in plenty of shipped sites (one real blog sits at
-1.39:1 on purpose); WCAG 1.4.11 asks 3:1 of the borders that identify a
-component, and the token sheet does not say which usage is which. Read where
-the token is used: if it outlines an input, button, or focus ring, fix it to
-3:1; if it separates sections, a subtle line is correct. `--pair` is always
-hard — pass the threshold you mean when you want the run to fail.
+1.39:1 on purpose); `--line` is the same token under another name (a sheet
+checked here borders every button and input with it and has no `--border` at
+all), so both names are checked — against the page surface and each raised
+panel, because a button sits on a panel, not on `bg`. WCAG 1.4.11 asks 3:1 of
+the borders that identify a component, and the token sheet does not say which
+usage is which. Read where the token is used: if it outlines an input, button,
+or focus ring, fix it to 3:1; if it separates sections, a subtle line is
+correct. `--pair` is always hard — pass the threshold you mean when you want
+the run to fail.
 
 ## Value formats
 

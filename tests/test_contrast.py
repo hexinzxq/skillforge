@@ -329,7 +329,27 @@ class ForegroundConventionTests(unittest.TestCase):
         labels = [label for label, _fg, _bg, _t in contrast.pairs_from_tokens(tokens)]
         self.assertEqual(labels, ["foreground on background",
                                   "card-foreground on card",
-                                  "border on background"])
+                                  "border on background",
+                                  "border on card"])
+
+    def test_a_line_token_is_a_border_under_another_name(self):
+        # A sheet checked here names its only stroke `--line` and borders every
+        # button and input with it; `--border` does not exist, so the divider
+        # advisory never ran on it. The row must appear for the page surface
+        # and each raised one, and stay advisory (a hairline divider is legal).
+        css = (":root { --bg: #0b0d12; --panel: #12151d; --text: #e6e9f0;"
+               " --line: #232838; }")
+        with tempfile.NamedTemporaryFile("w", suffix=".css", delete=False) as handle:
+            handle.write(css)
+            path = handle.name
+        try:
+            code, out = run("--css", path)
+            self.assertEqual(code, 0, out)
+            self.assertIn("line on bg", out)
+            self.assertIn("line on panel", out)
+            self.assertIn("ADVISORY", out)
+        finally:
+            Path(path).unlink()
 
     def test_mixed_conventions_coexist(self):
         tokens = {"bg": "#ffffff", "text": "#111111",
