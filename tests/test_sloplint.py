@@ -158,6 +158,28 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("focus-not-visible", out)
 
+    def test_a_page_with_headings_but_no_h1_is_a_tell(self):
+        # A real page checked here (a session-browser UI) titled every panel
+        # with <h2> and left the logo a <div>: nothing ever announces the page.
+        code, out = self.scan_html(
+            "<!doctype html><html><head><meta name=\"viewport\" "
+            "content=\"width=device-width, initial-scale=1\"></head>"
+            "<body><h2>Sessions</h2><p>x</p></body></html>")
+        self.assertEqual(code, 0)
+        self.assertIn("no-h1", out)
+
+    def test_a_page_with_an_h1_is_fine(self):
+        code, out = self.scan_html(
+            "<!doctype html><html><head><meta name=\"viewport\" "
+            "content=\"width=device-width, initial-scale=1\"></head>"
+            "<body><h1>Sessions</h1><h2>Today</h2></body></html>")
+        self.assertEqual(code, 0)
+        self.assertNotIn("no-h1", out)
+
+    def test_a_fragment_may_use_h2(self):
+        code, out = self.scan_html("<section><h2>Card</h2></section>")
+        self.assertNotIn("no-h1", out)
+
     def test_outline_none_without_focus_visible_fails(self):
         code, out = self.scan_css(".a { outline: none; }")
         self.assertEqual(code, 1)

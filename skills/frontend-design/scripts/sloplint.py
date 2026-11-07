@@ -34,6 +34,8 @@ COLOR_LITERAL = re.compile(
 THEME_SELECTOR = re.compile(r":root|\[data-theme", re.I)
 FULL_DOC = re.compile(r"<!doctype\s+html|<html\b", re.I)
 PAGE_RULE = re.compile(r"@page\b")
+H1_TAG = re.compile(r"<h1\b", re.I)
+H2_UP = re.compile(r"<h[2-6]\b", re.I)
 VIEWPORT_META = re.compile(r"<meta\b[^>]*\bname\s*=\s*[\"']?viewport\b", re.I)
 VIEWPORT_TAG = re.compile(r"<meta\b[^>]*\bname\s*=\s*[\"']?viewport\b[^>]*>", re.I)
 CONTENT_ATTR = re.compile(r"\bcontent\s*=\s*([\"'])(.*?)\1", re.S | re.I)
@@ -264,6 +266,14 @@ def check_html(path: Path, text: str) -> list[Finding]:
             out.append(Finding(str(path), zoom_line, "FAIL", "zoom-lock",
                                "viewport disables pinch-zoom (`user-scalable=no` or a low "
                                "`maximum-scale`) — WCAG 1.4.4 needs 200%; drop it", zoom_col))
+    # A full document with headings but no <h1> has no root: screen-reader
+    # navigation starts at h2 and "the top of the page" is a <div>. One real
+    # page checked here (a session-browser UI) titled every panel with <h2>
+    # and left the logo a div — linear reading never announces the page.
+    if FULL_DOC.search(text) and not H1_TAG.search(text) and H2_UP.search(text):
+        out.append(Finding(str(path), 1, "TELL", "no-h1",
+                           "full document has <h2>–<h6> but no `<h1>` — the outline has "
+                           "no top; make the visible page title the h1"))
     for match in IMG_TAG.finditer(text):
         tag = match.group(0)
         if not re.search(r"\balt\s*=", tag, re.I):
